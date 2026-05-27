@@ -51,20 +51,29 @@ PROTOTYPE_CSS = """
     [data-testid="stDecoration"], .stDeployButton { display: none !important; }
     [data-testid="stMainBlockContainer"] {
         max-width: none !important;
-        padding: 14px 30px 16px !important;
+        padding: 0 !important;
     }
     [data-testid="stVerticalBlock"] { gap: 0 !important; }
     .block-container { padding: 0 !important; }
     div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {
-        min-height: calc(100dvh - 30px);
+        min-height: calc(100dvh - 106px);
+    }
+    div[data-testid="stHorizontalBlock"] {
+        padding: 14px 30px 16px;
+        min-height: calc(100dvh - 76px);
+        gap: 18px !important;
+        flex-wrap: nowrap !important;
+        align-items: stretch !important;
     }
     div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child {
-        flex: 0 0 476px !important;
-        width: 476px !important;
-        max-width: 476px !important;
+        flex: 0 0 380px !important;
+        width: 380px !important;
+        max-width: 380px !important;
     }
     div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:last-child {
-        flex: 1 1 auto !important;
+        flex: 1 1 0 !important;
+        width: calc(100% - 398px) !important;
+        max-width: calc(100% - 398px) !important;
         min-width: 0 !important;
     }
     div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child > div[data-testid="stVerticalBlock"] {
@@ -73,8 +82,8 @@ PROTOTYPE_CSS = """
         border-radius: 10px;
         box-shadow: var(--shadow);
         overflow: hidden;
-        padding: 38px 58px 24px;
-        gap: 18px !important;
+        padding: 28px 46px 18px;
+        gap: 16px !important;
     }
     div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child > div[data-testid="stVerticalBlock"] > div:last-child {
         margin-top: auto;
@@ -196,52 +205,104 @@ PROTOTYPE_CSS = """
         gap: 18px;
         min-height: 0;
     }
+    .app-grid > .sidebar {
+        padding: 34px 46px 24px;
+    }
     .sidebar-content {
         display: grid;
-        gap: 20px;
+        gap: 16px;
     }
     h1, h2, h3, p { margin: 0; }
     h1.sidebar-title,
     .sidebar-title {
-        font-size: 34px !important;
-        line-height: 1.18 !important;
+        font-size: 26px !important;
+        line-height: 1.25 !important;
         letter-spacing: 0;
         font-weight: 1000 !important;
         color: var(--text) !important;
-        margin: 0 0 4px !important;
+        margin: 0 !important;
     }
     .field-title {
         color: var(--text);
-        font-size: 14px;
+        font-size: 18px;
         font-weight: 900;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
+    }
+    .upload-box {
+        border: 1px dashed rgba(255,255,255,.36);
+        background: var(--card-2);
+        border-radius: 8px;
+        min-height: 188px;
+        display: grid;
+        place-items: center;
+        color: var(--accent-dark);
+        transition: border-color .16s ease, background .16s ease;
+    }
+    .upload-box:hover {
+        border-color: rgba(46,168,229,.78);
+        background: #101823;
+    }
+    .upload-icon {
+        width: 58px;
+        height: 48px;
+        border: 5px solid rgba(20,121,184,.7);
+        border-radius: 6px;
+        position: relative;
+        margin: 0 auto 18px;
+    }
+    .upload-icon::before {
+        content: "";
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: rgba(20,121,184,.78);
+        left: 10px;
+        top: 10px;
+    }
+    .upload-icon::after {
+        content: "";
+        position: absolute;
+        left: 9px;
+        right: 7px;
+        bottom: 8px;
+        height: 24px;
+        background:
+            linear-gradient(135deg, transparent 0 28%, rgba(20,121,184,.8) 29% 52%, transparent 53%),
+            linear-gradient(45deg, transparent 0 35%, rgba(20,121,184,.8) 36% 62%, transparent 63%);
+    }
+    .upload-text {
+        text-align: center;
+        color: #1687c6;
+        font-size: 14px;
+        font-weight: 800;
     }
     .select-row {
         display: grid;
-        grid-template-columns: 104px minmax(0, 1fr);
-        gap: 20px;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 12px;
         align-items: center;
     }
     .select-label {
         color: #edf4ff;
-        font-size: 20px;
+        font-size: 16px;
         font-weight: 900;
         white-space: nowrap;
     }
     .view-select,
     .vehicle-select {
         width: 100%;
-        height: 54px;
-        border: 1px solid rgba(255,255,255,.38);
+        height: 44px;
+        border: 1px solid rgba(255,255,255,.42);
         background:
-            linear-gradient(45deg, transparent 50%, rgba(255,255,255,.82) 50%) right 32px center / 12px 12px no-repeat,
-            linear-gradient(135deg, rgba(255,255,255,.82) 50%, transparent 50%) right 22px center / 12px 12px no-repeat,
+            linear-gradient(45deg, transparent 50%, rgba(255,255,255,.72) 50%) right 22px center / 9px 9px no-repeat,
+            linear-gradient(135deg, rgba(255,255,255,.72) 50%, transparent 50%) right 14px center / 9px 9px no-repeat,
             var(--card-2);
-        border-radius: 9px;
-        color: #f2f7ff;
+        border-radius: 8px;
+        color: #dce8f7;
         appearance: none;
-        padding: 0 56px 0 20px;
-        font-size: 20px;
+        padding: 0 44px 0 16px;
+        font-size: 16px;
         font-weight: 900;
         cursor: pointer;
     }
@@ -252,13 +313,13 @@ PROTOTYPE_CSS = """
     }
     .topk-row {
         display: grid;
-        grid-template-columns: 1fr 186px;
-        gap: 16px;
+        grid-template-columns: 1fr 112px;
+        gap: 12px;
         align-items: center;
     }
     .label {
         color: #c8d6e6;
-        font-size: 22px;
+        font-size: 18px;
         font-weight: 900;
     }
     .hint {
@@ -270,16 +331,16 @@ PROTOTYPE_CSS = """
     }
     .sidebar .hint { display: none; }
     .number-like {
-        height: 56px;
-        border: 1px solid rgba(255,255,255,.38);
+        height: 44px;
+        border: 1px solid rgba(255,255,255,.42);
         background: var(--card-2);
-        border-radius: 9px;
-        color: #f2f7ff;
+        border-radius: 8px;
+        color: #dce8f7;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 0;
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 900;
     }
     .gallery-entry {
@@ -287,10 +348,11 @@ PROTOTYPE_CSS = """
         min-width: 0;
         height: 54px;
         flex: 0 0 auto;
-        border: 1px solid rgba(255,255,255,.16);
+        border: 1px solid rgba(255,255,255,.14);
         border-radius: 8px;
-        background: rgba(255,255,255,.13);
-        color: #edf4ff;
+        background: rgba(118,128,142,.34);
+        color: #c8d0dc;
+        color: #c8d0dc !important;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -299,10 +361,22 @@ PROTOTYPE_CSS = """
         font-size: 18px;
         font-weight: 900;
     }
+    .gallery-entry:visited,
+    .gallery-entry:active,
+    .gallery-entry *,
+    .gallery-entry *:visited {
+        color: #c8d0dc !important;
+    }
     .gallery-entry:hover {
-        border-color: rgba(46,168,229,.58);
-        background: rgba(46,168,229,.16);
-        color: #fff;
+        border-color: rgba(255,255,255,.22);
+        background: rgba(145,154,166,.42);
+        color: #edf4ff;
+        color: #edf4ff !important;
+        text-decoration: none;
+    }
+    .gallery-entry:hover *,
+    .gallery-entry:focus-visible {
+        color: #edf4ff !important;
     }
 
     .result-panel {
@@ -443,6 +517,41 @@ PROTOTYPE_CSS = """
     .result-blank {
         min-height: 100%;
         width: 100%;
+    }
+    .result-loading {
+        grid-column: 1 / -1;
+        min-height: 320px;
+        width: 100%;
+        display: grid;
+        place-items: center;
+        text-align: center;
+    }
+    .result-loading-card {
+        display: grid;
+        justify-items: center;
+        gap: 14px;
+        color: #edf4ff;
+        font-size: 18px;
+        font-weight: 900;
+    }
+    .loading-ring {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 4px solid rgba(46,168,229,.18);
+        border-top-color: #2ea8e5;
+        animation: spin .9s linear infinite;
+    }
+    .loading-note {
+        color: #9aa8b8;
+        font-size: 13px;
+        font-weight: 800;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .loading-ring { animation: none; }
     }
 
     .detail-stage {
@@ -883,10 +992,17 @@ PROTOTYPE_CSS = """
     section[data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] * {
         display: none !important;
     }
+    div[data-testid="stFileUploaderFile"],
+    [data-testid^="stFileUploaderFile"] {
+        display: none !important;
+    }
     div[data-testid="stFileUploaderDropzoneInstructions"] {
         color: transparent !important;
+        display: block !important;
         font-size: 0 !important;
         font-weight: 900 !important;
+        text-align: center !important;
+        width: 100% !important;
     }
     div[data-testid="stFileUploaderDropzoneInstructions"]::before {
         content: "上传";
@@ -896,7 +1012,18 @@ PROTOTYPE_CSS = """
         font-weight: 900;
         text-align: center;
         margin-bottom: 4px;
+        white-space: nowrap;
     }
+    div[data-testid="stFileUploaderDropzoneInstructions"]::after {
+        content: "JPG / PNG / WEBP / BMP";
+        display: block;
+        color: rgba(22,135,198,.82);
+        font-size: 11px;
+        font-weight: 800;
+        text-align: center;
+        white-space: nowrap;
+    }
+    div[data-testid="stFileUploaderDropzoneInstructions"] *,
     div[data-testid="stFileUploaderDropzoneInstructions"] > span,
     div[data-testid="stFileUploaderDropzoneInstructions"] > small {
         display: none !important;
@@ -916,10 +1043,38 @@ PROTOTYPE_CSS = """
     button[data-testid="stBaseButton-primary"]:hover,
     button[kind="primary"]:hover { filter: brightness(1.08); color: #fff !important; }
     button[disabled] { opacity: .42 !important; }
+    .upload-preview-card {
+        margin-top: -6px;
+        background: rgba(12,17,23,.72);
+        border: 1px solid rgba(255,255,255,.10);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .upload-preview-card img {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        display: block;
+        object-fit: contain;
+        background: #11181d;
+    }
+    .upload-preview-name {
+        border-top: 1px solid rgba(255,255,255,.08);
+        color: #dce8f7;
+        font-family: "Microsoft YaHei UI", "PingFang SC", "Source Han Sans SC", system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 900;
+        line-height: 1.45;
+        padding: 9px 11px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
 
     @media (max-width: 1280px) {
         .app-grid { grid-template-columns: 330px 1fr; }
+        .app-grid > .sidebar { padding: 28px; }
+        .app-grid > .sidebar .sidebar-title { font-size: 24px !important; }
         .summary, .parts-summary { grid-template-columns: 1fr; }
+        .detail-canvas { min-width: 0; }
     }
     @media (max-width: 900px) {
         .app-header {
@@ -931,8 +1086,19 @@ PROTOTYPE_CSS = """
         .main-nav { gap: 10px; padding-bottom: 2px; }
         .main-nav a { font-size: 14px; }
         .shell { min-height: 100dvh; overflow: visible; padding: 12px; }
+        div[data-testid="stHorizontalBlock"] {
+            padding: 12px;
+            min-height: auto;
+            flex-direction: column !important;
+            flex-wrap: nowrap !important;
+        }
         .app-grid { grid-template-columns: 1fr; }
         div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child {
+            flex: 1 1 auto !important;
+            width: 100% !important;
+            max-width: none !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:last-child {
             flex: 1 1 auto !important;
             width: 100% !important;
             max-width: none !important;
@@ -965,12 +1131,12 @@ def apply_prototype_chrome() -> None:
 def _header_html() -> str:
     return _html_block(
         """
-        <header class="app-header" aria-label="产品导航">
+        <div class="app-header" role="banner" aria-label="产品导航">
           <div class="brand">
             <span class="bot-mark" aria-hidden="true"></span>
             <span>Ragentic Designer</span>
           </div>
-          <nav class="main-nav" aria-label="主导航">
+          <div class="main-nav" role="navigation" aria-label="主导航">
             <a href="#">首页</a>
             <a href="#">创意设计</a>
             <a href="#">图像渲染</a>
@@ -980,8 +1146,8 @@ def _header_html() -> str:
             <a href="#">资产管理</a>
             <a href="#">历史记录</a>
             <a class="active" href="?view=workbench" target="_self">对比查重</a>
-          </nav>
-        </header>
+          </div>
+        </div>
         """
     )
 
@@ -1058,6 +1224,7 @@ def render_workbench_shell(
     query_path = (result or {}).get("query")
     query_uri = uploaded_preview_uri or _path_uri(query_path, size=(640, 480))
 
+    st.markdown(_header_html(), unsafe_allow_html=True)
     left_col, right_col = st.columns([0.28, 0.72], gap="large")
     with left_col:
         st.markdown(
@@ -1089,11 +1256,25 @@ def render_workbench_shell(
             ),
             unsafe_allow_html=True,
         )
+        st.markdown('<div class="field-title">上传待对比图片</div>', unsafe_allow_html=True)
         uploaded = st.file_uploader(
             "上传待对比图片",
             type=["jpg", "jpeg", "png", "webp", "bmp"],
             key="prototype_upload",
+            label_visibility="collapsed",
         )
+        if uploaded is not None and uploaded_preview_uri:
+            st.markdown(
+                _html_block(
+                    f"""
+                    <figure class="upload-preview-card">
+                      <img src="{uploaded_preview_uri}" alt="已上传图片缩略图" />
+                      <figcaption class="upload-preview-name" title="{escape(uploaded.name)}">{escape(uploaded.name)}</figcaption>
+                    </figure>
+                    """
+                ),
+                unsafe_allow_html=True,
+            )
         st.markdown(
             _html_block(
                 """
@@ -1111,7 +1292,19 @@ def render_workbench_shell(
         start = st.button("开始比对", type="primary", use_container_width=True, disabled=uploaded is None or gallery_count <= 0)
         st.markdown('<a class="gallery-entry" href="?view=gallery" target="_self">图库管理</a>', unsafe_allow_html=True)
 
-    if result:
+    if start and uploaded is not None:
+        result_body = _html_block(
+            """
+            <div class="result-loading" role="status" aria-live="polite">
+              <div class="result-loading-card">
+                <div class="loading-ring" aria-hidden="true"></div>
+                <div>正在执行相似度计算，请稍候...</div>
+                <div class="loading-note">系统正在提取轮廓与部件特征</div>
+              </div>
+            </div>
+            """
+        )
+    elif result:
         query_img = f'<img src="{query_uri}" alt="上传待比对车辆" />' if query_uri else '<div class="empty-result">待比对图片信息</div>'
         result_body = _html_block(
             f"""
@@ -1134,7 +1327,7 @@ def render_workbench_shell(
         st.markdown(
             _html_block(
                 f"""
-                <section class="panel result-panel" style="min-height: calc(100dvh - 30px);">
+                <section class="panel result-panel" style="min-height: calc(100dvh - 106px);">
                   <div class="result-head"><h2>分析结果</h2></div>
                   <div class="result-stage">
                     {result_body}
@@ -1161,6 +1354,7 @@ def render_gallery_page(gallery_dir: Path, gallery_count: int) -> None:
     st.markdown(
         _html_block(
             f"""
+            {_header_html()}
             <main class="page">
               <section class="gallery-shell" aria-label="图库管理">
                 <div class="gallery-head">
@@ -1203,15 +1397,19 @@ def render_detail_page(row: dict | None, result: dict | None, gallery_dir: Path)
     point_items = "".join(f"<li>{escape(str(point))}</li>" for point in points[:4])
     part_cards = _part_cards_html(row)
 
-    st.markdown('<main class="shell"><section class="app-grid" aria-label="汽车图片相似度分析工作台">', unsafe_allow_html=True)
-    st.markdown(
-        _html_block(
-            """
+    st.markdown(_header_html(), unsafe_allow_html=True)
+    sidebar_html = _html_block(
+        """
             <aside class="panel sidebar">
               <h1 class="sidebar-title">汽车图片相似度分析</h1>
               <div>
                 <div class="field-title">上传待对比图片</div>
-                <div class="empty-result">上传</div>
+                <div class="upload-box" role="button" tabindex="0" aria-label="上传待对比图片">
+                  <div>
+                    <div class="upload-icon"></div>
+                    <div class="upload-text">上传</div>
+                  </div>
+                </div>
               </div>
               <div class="number-like">车型选择</div>
               <div class="topk-row">
@@ -1220,13 +1418,14 @@ def render_detail_page(row: dict | None, result: dict | None, gallery_dir: Path)
               </div>
               <a class="gallery-entry" href="?view=workbench" target="_self">返回工作台</a>
             </aside>
-            """
-        ),
-        unsafe_allow_html=True,
+        """
     )
     st.markdown(
         _html_block(
             f"""
+            <main class="shell">
+            <section class="app-grid" aria-label="汽车图片相似度分析工作台">
+            {sidebar_html}
             <section class="panel result-panel">
               <div class="result-head"><h2>分析结果</h2></div>
               <div class="detail-stage">

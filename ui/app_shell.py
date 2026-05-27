@@ -66,18 +66,17 @@ def run_app() -> None:
     if start and uploaded is not None:
         st.session_state.pop("selected_candidate_id", None)
         query_path = _save_upload(uploaded, upload_root)
-        with st.spinner("正在执行相似度计算，请稍候..."):
-            result = run_pipeline(
-                input_dir=gallery_dir,
-                query_image=query_path,
-                output_dir=output_dir,
-                parts=selected_parts,
-                ignore_parts=[],
-                features=",".join(features),
-                topk=int(topk),
-                device=None,
-                skip_cutout=False,
-            )
+        result = run_pipeline(
+            input_dir=gallery_dir,
+            query_image=query_path,
+            output_dir=output_dir,
+            parts=selected_parts,
+            ignore_parts=[],
+            features=",".join(features),
+            topk=int(topk),
+            device=None,
+            skip_cutout=False,
+        )
         st.session_state["last_result"] = result
         _clear_query_params()
         st.rerun()
