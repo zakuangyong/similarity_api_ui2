@@ -12,5 +12,5 @@ kornia>=0.7
 timm>=0.9
 tqdm>=4.65
 ultralytics>=8.3
-git+https://github.com/facebookresearch/segment-anything.git
+segment-anything @ https://github.com/facebookresearch/segment-anything/archive/refs/heads/main.zip
 

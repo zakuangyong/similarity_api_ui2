@@ -72,6 +72,39 @@ def _fill_largest_external_contour(mask: np.ndarray) -> np.ndarray:
     return filled.astype(bool)
 
 
+def _resize_mask01(mask01: np.ndarray | None, width: int, height: int) -> np.ndarray | None:
+    if mask01 is None:
+        return None
+    if mask01.ndim == 2 and (mask01.shape[0] != height or mask01.shape[1] != width):
+        return cv2.resize(mask01.astype(np.float32), (width, height), interpolation=cv2.INTER_NEAREST)
+    return mask01
+
+
+def _clean_grille_mask(
+    *,
+    sam_mask: np.ndarray,
+    yolo_box: np.ndarray,
+    image_shape: tuple[int, int],
+    yolo_mask01: np.ndarray | None,
+) -> np.ndarray:
+    height, width = image_shape
+    yolo_mask01 = _resize_mask01(yolo_mask01, width, height)
+    box = _clip_box_to_image(yolo_box, width, height)
+
+    base = (yolo_mask01 >= 0.5) if yolo_mask01 is not None else sam_mask
+    base = _mask_inside_box(base, box)
+    sam_limited = _mask_inside_box(sam_mask, box)
+    base = np.logical_or(base, sam_limited)
+
+    kernel = np.ones((5, 5), np.uint8)
+    m = cv2.morphologyEx(base.astype(np.uint8), cv2.MORPH_CLOSE, kernel, iterations=2)
+    m = cv2.dilate(m, np.ones((3, 3), np.uint8), iterations=1)
+    m = _mask_inside_box(m.astype(bool), box)
+    m = _fill_largest_external_contour(m)
+    m = _mask_inside_box(m, box)
+    return m.astype(bool)
+
+
 def _clean_mask(
     *,
     sam_mask: np.ndarray,
@@ -85,12 +118,7 @@ def _clean_mask(
     cleaned = _mask_inside_box(sam_mask, _expand_box(yolo_box, box_margin_ratio, width, height))
 
     if yolo_mask01 is not None:
-        if yolo_mask01.ndim == 2 and (yolo_mask01.shape[0] != height or yolo_mask01.shape[1] != width):
-            yolo_mask01 = cv2.resize(
-                yolo_mask01.astype(np.float32),
-                (width, height),
-                interpolation=cv2.INTER_NEAREST,
-            )
+        yolo_mask01 = _resize_mask01(yolo_mask01, width, height)
         cleaned = np.logical_and(cleaned, yolo_mask01 >= 0.5)
 
     if keep_largest_component:
@@ -209,17 +237,23 @@ def run_cutout_by_sam(
                 break
 
             yolo_mask01 = car_front_seg._as_mask01(car_front_seg._inst_get(inst, "mask01"))
-            cleaned = _clean_mask(
-                sam_mask=sam_masks[j],
-                yolo_box=np.asarray(box, dtype=np.float32),
-                image_shape=rgb.shape[:2],
-                box_margin_ratio=box_margin_ratio,
-                keep_largest_component=keep_largest_component,
-                yolo_mask01=yolo_mask01,
-            )
             name = str(car_front_seg._inst_get(inst, "name") or "")
             if name == "grille":
-                cleaned = _fill_largest_external_contour(cleaned)
+                cleaned = _clean_grille_mask(
+                    sam_mask=sam_masks[j],
+                    yolo_box=np.asarray(box, dtype=np.float32),
+                    image_shape=rgb.shape[:2],
+                    yolo_mask01=yolo_mask01,
+                )
+            else:
+                cleaned = _clean_mask(
+                    sam_mask=sam_masks[j],
+                    yolo_box=np.asarray(box, dtype=np.float32),
+                    image_shape=rgb.shape[:2],
+                    box_margin_ratio=box_margin_ratio,
+                    keep_largest_component=keep_largest_component,
+                    yolo_mask01=yolo_mask01,
+                )
             j += 1
             inst2 = dict(inst)
             inst2["mask01"] = cleaned.astype(np.float32)
