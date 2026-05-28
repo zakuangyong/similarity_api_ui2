@@ -64,8 +64,8 @@ project files:
 
 ```bash
 docker compose down
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.direct.yml build --no-cache car-similarity-app
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.direct.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml build --no-cache similarity-backend
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
 If container startup reports `failed to discover GPU vendor from CDI`, first verify the
@@ -97,9 +97,6 @@ To start without GPU while fixing the runtime:
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml down
 docker compose up -d
 ```
-
-If the GPU container startup reports `failed to discover GPU vendor from CDI`, first verify the
-host GPU runtime:
 
 ## Build mirrors
 
@@ -133,7 +130,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 
 ```bash
 docker compose ps
-docker compose logs -f car-similarity-app
+docker compose logs -f similarity-backend
 docker compose restart
 docker compose down
 ```
