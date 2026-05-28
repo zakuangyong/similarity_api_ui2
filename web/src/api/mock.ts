@@ -143,6 +143,7 @@ export async function mockGetCandidateDetail(runId: string, candidateId: string)
             b_color: candidate.url,
             a_gray: '/img/front/星耀7.svg',
             b_gray: candidate.url,
+            diff: '',
           },
         },
         {
@@ -154,6 +155,7 @@ export async function mockGetCandidateDetail(runId: string, candidateId: string)
             b_color: candidate.url,
             a_gray: '/img/front/星耀7.svg',
             b_gray: candidate.url,
+            diff: '',
           },
         },
         {
@@ -165,6 +167,7 @@ export async function mockGetCandidateDetail(runId: string, candidateId: string)
             b_color: candidate.url,
             a_gray: '/img/front/星耀7.svg',
             b_gray: candidate.url,
+            diff: '',
           },
         },
         {
@@ -176,6 +179,7 @@ export async function mockGetCandidateDetail(runId: string, candidateId: string)
             b_color: candidate.url,
             a_gray: '/img/front/星耀7.svg',
             b_gray: candidate.url,
+            diff: '',
           },
         },
       ],

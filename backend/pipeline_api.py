@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import cv2
+import numpy as np
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
@@ -77,6 +81,84 @@ def _find_existing_with_any_ext(dir_path: Path, stem: str) -> Path | None:
         if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
             return p
     return None
+
+
+def _safe_slug(value: str) -> str:
+    s = str(value or "").strip()
+    s = re.sub(r"[\\/:*?\"<>|\s]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    return s or "x"
+
+
+def _imread_cn(path: Path) -> np.ndarray | None:
+    data = np.fromfile(str(path), dtype=np.uint8)
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
+
+
+def _imwrite_cn(path: Path, img: np.ndarray) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ext = path.suffix.lower() if path.suffix else ".png"
+    ok, buf = cv2.imencode(ext, img)
+    if not ok:
+        return False
+    buf.tofile(str(path))
+    return True
+
+
+def _to_gray_rgba(img: np.ndarray) -> tuple[np.ndarray, np.ndarray | None] | None:
+    if img is None:
+        return None
+    if img.ndim != 3:
+        return None
+    if img.shape[2] == 4:
+        bgr = img[:, :, :3]
+        alpha = img[:, :, 3]
+    elif img.shape[2] == 3:
+        bgr = img
+        alpha = None
+    else:
+        return None
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    gray_bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    if alpha is not None:
+        out = np.dstack([gray_bgr, alpha])
+    else:
+        out = gray_bgr
+    return out, gray
+
+
+def _diff_heatmap(
+    *,
+    gray_a: np.ndarray,
+    gray_b: np.ndarray,
+    alpha_a: np.ndarray | None,
+    alpha_b: np.ndarray | None,
+) -> np.ndarray:
+    h, w = gray_a.shape[:2]
+    if gray_b.shape[:2] != (h, w):
+        gray_b = cv2.resize(gray_b, (w, h), interpolation=cv2.INTER_AREA)
+    diff = cv2.absdiff(gray_a.astype(np.uint8), gray_b.astype(np.uint8))
+    if diff.max() > 0:
+        diff_n = (diff.astype(np.float32) / float(diff.max()) * 255.0).clip(0, 255).astype(np.uint8)
+    else:
+        diff_n = diff
+    heat = cv2.applyColorMap(diff_n, cv2.COLORMAP_JET)
+    mask: np.ndarray | None = None
+    if alpha_a is not None:
+        mask = alpha_a > 0
+    if alpha_b is not None:
+        ab = alpha_b
+        if ab.shape[:2] != (h, w):
+            ab = cv2.resize(ab, (w, h), interpolation=cv2.INTER_NEAREST)
+        mask = (mask if mask is not None else np.zeros((h, w), dtype=bool)) | (ab > 0)
+    if mask is not None:
+        out = heat.copy()
+        out[~mask] = 0
+        alpha = (mask.astype(np.uint8) * 255).astype(np.uint8)
+        return np.dstack([out, alpha])
+    return heat
 
 
 def list_gallery_images(input_dir: Path) -> list[Path]:
@@ -226,8 +308,9 @@ def score_tag(score: float | None) -> str:
 PART_LABELS = {
     "right_mirror": "后视镜",
     "front_right_light": "车灯",
-    "front_bumper": "前保险杠",
     "front_glass": "前挡风玻璃",
+    "grille": "中网",
+    "hood": "机盖",
 }
 
 
@@ -274,6 +357,37 @@ def build_candidate_detail(
         c_path = obj.get("candidate_path")
         a_color = path_to_url(path=str(q_path), img_root=img_root, result_root=result_root) if q_path else None
         b_color = path_to_url(path=str(c_path), img_root=img_root, result_root=result_root) if c_path else None
+        a_gray_url = a_color or ""
+        b_gray_url = b_color or ""
+        diff_part_url = ""
+        if q_path and c_path:
+            q_file = Path(str(q_path))
+            c_file = Path(str(c_path))
+            if q_file.is_file() and c_file.is_file():
+                tile_dir = result_root / "tiles" / _safe_slug(run_id) / f"{_safe_slug(query_id)}_vs_{_safe_slug(candidate_id)}" / _safe_slug(str(part_key))
+                a_gray_path = tile_dir / "a_gray.png"
+                b_gray_path = tile_dir / "b_gray.png"
+                diff_part_path = tile_dir / "diff.png"
+                if (not a_gray_path.exists()) or (not b_gray_path.exists()) or (not diff_part_path.exists()):
+                    img_a = _imread_cn(q_file)
+                    img_b = _imread_cn(c_file)
+                    a_pack = None if img_a is None else _to_gray_rgba(img_a)
+                    b_pack = None if img_b is None else _to_gray_rgba(img_b)
+                    if a_pack is not None and b_pack is not None:
+                        a_gray_img, a_gray = a_pack
+                        b_gray_img, b_gray = b_pack
+                        if not a_gray_path.exists():
+                            _imwrite_cn(a_gray_path, a_gray_img)
+                        if not b_gray_path.exists():
+                            _imwrite_cn(b_gray_path, b_gray_img)
+                        if not diff_part_path.exists():
+                            alpha_a = img_a[:, :, 3] if img_a is not None and img_a.ndim == 3 and img_a.shape[2] == 4 else None
+                            alpha_b = img_b[:, :, 3] if img_b is not None and img_b.ndim == 3 and img_b.shape[2] == 4 else None
+                            diff_img = _diff_heatmap(gray_a=a_gray, gray_b=b_gray, alpha_a=alpha_a, alpha_b=alpha_b)
+                            _imwrite_cn(diff_part_path, diff_img)
+                a_gray_url = path_to_url(path=a_gray_path, img_root=img_root, result_root=result_root) or a_gray_url
+                b_gray_url = path_to_url(path=b_gray_path, img_root=img_root, result_root=result_root) or b_gray_url
+                diff_part_url = path_to_url(path=diff_part_path, img_root=img_root, result_root=result_root) or diff_part_url
         fused = float(obj.get("fused") or 0.0)
         evidence.append(
             {
@@ -283,8 +397,9 @@ def build_candidate_detail(
                 "tiles": {
                     "a_color": a_color or "",
                     "b_color": b_color or "",
-                    "a_gray": a_color or "",
-                    "b_gray": b_color or "",
+                    "a_gray": a_gray_url,
+                    "b_gray": b_gray_url,
+                    "diff": diff_part_url,
                 },
                 "metrics": {
                     "clip": obj.get("clip"),

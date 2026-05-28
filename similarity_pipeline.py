@@ -23,7 +23,7 @@ from tools.cdse_similarity import (
     merged_overall_weights,
     part_feature_weights_for,
 )
-from tools.cutout_by_birefnet import run_cutout
+from tools.cutout_by_sam import run_cutout_by_sam
 
 
 ROOT = Path(__file__).resolve().parent
@@ -170,6 +170,9 @@ def _run_yolo_part_export(
         if not results:
             continue
         raw = car_front_seg.unwrap_instances(results[0])
+        for inst in raw:
+            name = str(car_front_seg._inst_get(inst, "name") or "")
+            inst["name"] = "hood" if name == "front_bumper" else name
         processed = car_front_seg.postprocess_instances(
             raw,
             car_front_seg.RULES,
@@ -249,17 +252,25 @@ def _save_image(path: Path, img: np.ndarray) -> str:
 
 
 def _largest_car_mask(model: YOLO, image_bgr: np.ndarray) -> np.ndarray | None:
-    results = model.predict(image_bgr, classes=[2], conf=0.3, verbose=False)
-    if not results or results[0].masks is None or len(results[0].boxes) == 0:
+    def pick(results: list[Any] | None) -> np.ndarray | None:
+        if not results or results[0].masks is None or len(results[0].boxes) == 0:
+            return None
+        masks = results[0].masks.data.detach().cpu().numpy()
+        boxes = results[0].boxes.xyxy.detach().cpu().numpy()
+        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        idx = int(np.argmax(areas))
+        mask = masks[idx]
+        h, w = image_bgr.shape[:2]
+        if mask.shape[:2] != (h, w):
+            mask = cv2.resize(mask.astype(np.float32), (w, h), interpolation=cv2.INTER_NEAREST)
+        return mask
+
+    results = model.predict(image_bgr, classes=[2, 3, 5, 7], conf=0.2, verbose=False)
+    mask = pick(results)
+    if mask is None:
+        mask = pick(model.predict(image_bgr, conf=0.2, verbose=False))
+    if mask is None:
         return None
-    masks = results[0].masks.data.detach().cpu().numpy()
-    boxes = results[0].boxes.xyxy.detach().cpu().numpy()
-    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-    idx = int(np.argmax(areas))
-    mask = masks[idx]
-    h, w = image_bgr.shape[:2]
-    if mask.shape[:2] != (h, w):
-        mask = cv2.resize(mask.astype(np.float32), (w, h), interpolation=cv2.INTER_NEAREST)
     return mask > 0.5
 
 
@@ -609,13 +620,20 @@ def run_pipeline(
 
     if not skip_cutout:
         if _count_images(parts_dir) <= 0:
-            raise RuntimeError(f"未产生部件截图，无法进入 BiRefNet 主体识别: {parts_dir}")
-        run_cutout(
-            input_dir=parts_dir,
+            raise RuntimeError(f"未产生部件截图，无法进入 SAM 主体识别: {parts_dir}")
+        run_cutout_by_sam(
+            stage_dir=items[0].staged_path.parent,
             output_dir=cutout_dir,
-            model_name=_config_path(config, "birefnet_model"),
-            device=device or "auto",
-            alpha_threshold=0.13,
+            config=config,
+            allowed_parts=allowed_parts,
+            sam_checkpoint=_resolve_path("models/sam/sam_vit_h.pth"),
+            sam_type="vit_h",
+            device=("cuda:0" if device == "cuda" else "cpu") if device else None,
+            conf=float(conf),
+            iou=float(iou),
+            imgsz=int(imgsz),
+            box_margin_ratio=0.03,
+            keep_largest_component=True,
         )
     else:
         cutout_dir = parts_dir

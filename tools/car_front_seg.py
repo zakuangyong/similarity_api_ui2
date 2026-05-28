@@ -28,6 +28,9 @@ class PartRule:
 RULES = {
     "right_mirror": PartRule(name="right_mirror", side="left", max_instances=1, merge_mode="union"),
     "front_right_light": PartRule(name="front_right_light", side="left", max_instances=1, merge_mode="none"),
+    "hood": PartRule(name="hood", side="any", max_instances=1, merge_mode="none"),
+    "front_glass": PartRule(name="front_glass", side="any", max_instances=1, merge_mode="none"),
+    "grille": PartRule(name="grille", side="any", max_instances=1, merge_mode="none"),
 }
 
 def iter_images(path: Path) -> list[Path]:

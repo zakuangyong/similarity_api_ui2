@@ -1,6 +1,6 @@
 {
   "models": {
-    "front_part_weight": "models/yolo-seg/front-mirror-light-200epoch2.pt",
+    "front_part_weight": "models/yolo-seg/yolov11m-seg-front-5label-2000.pt",
     "carpart_weight": "models/yolo-seg/yolo11m-seg-carpart-epoch70.pt",
     "contour_weight": "models/yolov8n-seg.pt",
     "birefnet_model": "models/BiRefNet",
@@ -10,12 +10,11 @@
     "dino_weights": "models/dino/dinov2_vitb14_reg4_pretrain.pth"
   },
   "parts": [
-    "right_mirror",
+    "front_glass",
     "front_right_light",
-    "front_bumper",
     "grille",
     "hood",
-    "front_glass"
+    "right_mirror"
   ],
   "features": "dino,ssim,edge",
   "score_weights": {
@@ -23,23 +22,17 @@
     "parts": 0.6
   },
   "part_feature_weights": {
-    "right_mirror": {
-      "clip": 0.30,
-      "dino": 0.45,
-      "ssim": 0.15,
-      "edge": 0.10
+    "front_glass": {
+      "clip": 0.20,
+      "dino": 0.40,
+      "ssim": 0.25,
+      "edge": 0.15
     },
     "front_right_light": {
       "clip": 0.10,
       "dino": 0.40,
       "ssim": 0.40,
       "edge": 0.10
-    },
-    "front_bumper": {
-      "clip": 0.25,
-      "dino": 0.35,
-      "ssim": 0.15,
-      "edge": 0.25
     },
     "grille": {
       "clip": 0.25,
@@ -53,20 +46,19 @@
       "ssim": 0.15,
       "edge": 0.10
     },
-    "front_glass": {
-      "clip": 0.20,
-      "dino": 0.40,
-      "ssim": 0.25,
-      "edge": 0.15
+    "right_mirror": {
+      "clip": 0.30,
+      "dino": 0.45,
+      "ssim": 0.15,
+      "edge": 0.10
     }
   },
   "part_overall_weights": {
-    "right_mirror": 0.12,
+    "front_glass": 0.15,
     "front_right_light": 0.22,
-    "front_bumper": 0.18,
     "grille": 0.18,
     "hood": 0.15,
-    "front_glass": 0.15
+    "right_mirror": 0.12
   }
 }
 

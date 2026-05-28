@@ -38,6 +38,7 @@ export type PartEvidence = {
     b_color: string
     a_gray: string
     b_gray: string
+    diff: string
   }
   metrics?: {
     clip?: number

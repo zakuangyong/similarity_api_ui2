@@ -37,6 +37,35 @@
   transition: border-color 0.16s ease, background 0.16s ease;
 }
 
+.upload-preview {
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.upload-preview img {
+  width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+  background: #11181d;
+  border-radius: 6px;
+  display: block;
+}
+
+.upload-filename {
+  width: 100%;
+  text-align: center;
+  color: #edf4ff;
+  font-size: 12px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .upload-box:hover {
   border-color: rgba(46, 168, 229, 0.78);
   background: #101823;
@@ -652,24 +681,31 @@ h2 {
   aspect-ratio: 1 / 1;
 }
 
+.part-tile img {
+  padding: 8px;
+  box-sizing: border-box;
+  object-fit: contain;
+  object-position: 50% 50%;
+}
+
 .tile-crop.mirror {
-  object-position: 58% 30%;
-  object-fit: cover;
+  object-position: 50% 50%;
+  object-fit: contain;
 }
 
 .tile-crop.light {
-  object-position: 42% 56%;
-  object-fit: cover;
+  object-position: 50% 50%;
+  object-fit: contain;
 }
 
 .tile-crop.grille {
-  object-position: 50% 62%;
-  object-fit: cover;
+  object-position: 50% 50%;
+  object-fit: contain;
 }
 
 .tile-crop.glass {
-  object-position: 50% 28%;
-  object-fit: cover;
+  object-position: 50% 50%;
+  object-fit: contain;
 }
 
 .part-caption {

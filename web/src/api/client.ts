@@ -2,7 +2,7 @@ import type { CandidateDetailResponse, CompareResponse, GalleryResponse } from '
 import { mockCompare, mockGetCandidateDetail, mockGetGallery } from './mock'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
-const USE_MOCK = (import.meta.env.VITE_USE_MOCK as string | undefined) !== 'false'
+const USE_MOCK = (import.meta.env.VITE_USE_MOCK as string | undefined) === 'true'
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, init)

@@ -37,7 +37,7 @@ python similarity_pipeline.py --input-dir ./img/front --query-image ./some_car.j
 ## 页面运行
 
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.cpu.txt
 python -m streamlit run app.py
 ```
 

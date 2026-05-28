@@ -3,12 +3,25 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { getCandidateDetail } from '@/api/client'
 import type { CandidateDetailResponse, ScoreTag } from '@/api/types'
+import { loadLastQueryName } from '@/state/runCache'
 
 const route = useRoute()
 const runId = computed(() => String(route.params.runId || 'latest'))
 const candidateId = computed(() => String(route.params.candidateId || ''))
 
 const data = ref<CandidateDetailResponse | null>(null)
+const queryName = computed(() => {
+  const q = route.query.q
+  if (typeof q === 'string' && q.trim()) return q.trim()
+  const last = loadLastQueryName()
+  if (last) return last
+  return ''
+})
+const queryThumb = computed(() => data.value?.query.image_url || '')
+const filteredEvidence = computed(() => {
+  const list = data.value?.parts.evidence ?? []
+  return list.filter((p) => p.part_name !== '机盖')
+})
 
 onMounted(async () => {
   try {
@@ -41,14 +54,18 @@ function cropClass(partName: string) {
 
 <template>
   <main class="shell">
-    <section class="app-grid" aria-label="汽车图片相似度分析工作台">
+    <section class="app-grid" aria-label="相似度查重工作台">
       <aside class="panel sidebar">
-        <h1>汽车图片相似度分析</h1>
+        <h1>相似度查重</h1>
 
         <div>
           <div class="field-title">上传待对比图片</div>
-          <div class="upload-box" role="button" tabindex="0" aria-label="上传待对比图片">
-            <div>
+          <div class="upload-box" tabindex="0" aria-label="上传待对比图片">
+            <div v-if="queryThumb" class="upload-preview">
+              <img :src="queryThumb" alt="上传图片缩略图" />
+              <div class="upload-filename">{{ queryName || '上传比对图片' }}</div>
+            </div>
+            <div v-else>
               <div class="upload-icon"></div>
               <div class="upload-text">上传</div>
             </div>
@@ -62,7 +79,7 @@ function cropClass(partName: string) {
 
         <div class="topk-row">
           <div>
-            <div class="label">相似度Top-K</div>
+            <div class="label">返回结果Top-N</div>
             <div class="hint">返回最相似的前 N 张候选图。</div>
           </div>
           <div class="number-like">10</div>
@@ -79,7 +96,7 @@ function cropClass(partName: string) {
           <div class="detail-canvas">
             <header class="topbar">
               <h1>A车 vs B车 相似度分析详情</h1>
-              <RouterLink class="back" to="/workbench" aria-label="返回概览">返回概览</RouterLink>
+              <RouterLink class="back" :to="{ name: 'workbench', query: { restore: '1' } }" aria-label="返回概览">返回概览</RouterLink>
             </header>
 
             <nav class="anchor-nav" aria-label="详情页快捷导航">
@@ -144,7 +161,7 @@ function cropClass(partName: string) {
                 <div class="image-grid">
                   <figure class="image-card large">
                     <div class="diff-map" role="img" aria-label="整车轮廓差异图">
-                      <img :src="data?.contour.diff_image_url ?? '/prototype-assets/edge_diff.jpg'" alt="整车轮廓差异图" />
+                      <img :src="data?.contour.diff_image_url || '/prototype-assets/edge_diff.jpg'" alt="整车轮廓差异图" />
                     </div>
                     <figcaption class="image-caption">整车轮廓差异图</figcaption>
                   </figure>
@@ -178,7 +195,7 @@ function cropClass(partName: string) {
               </div>
 
               <div id="evidence" class="part-grid">
-                <article v-for="p in (data?.parts.evidence ?? [])" :key="p.part_name" class="part-card">
+                <article v-for="p in filteredEvidence" :key="p.part_name" class="part-card">
                   <div class="part-head">
                     <div class="part-title">{{ p.part_name }}相似度评分：{{ p.fused.toFixed(1).replace(/\.0$/, '') }}</div>
                     <div :class="partBadgeClass(p.tag)">{{ p.tag }}</div>
@@ -188,7 +205,11 @@ function cropClass(partName: string) {
                     <div class="part-tile"><img :class="cropClass(p.part_name)" :src="p.tiles.b_color" :alt="`B color ${p.part_name}`" /><div class="part-caption">B color</div></div>
                     <div class="part-tile"><img :class="cropClass(p.part_name)" :src="p.tiles.a_gray" :alt="`A gray ${p.part_name}`" /><div class="part-caption">A gray</div></div>
                     <div class="part-tile"><img :class="cropClass(p.part_name)" :src="p.tiles.b_gray" :alt="`B gray ${p.part_name}`" /><div class="part-caption">B gray</div></div>
-                    <div class="part-tile"><div class="tile-diff"></div><div class="part-caption">diff</div></div>
+                    <div class="part-tile">
+                      <img v-if="p.tiles.diff" :src="p.tiles.diff" :alt="`diff ${p.part_name}`" />
+                      <div v-else class="tile-diff"></div>
+                      <div class="part-caption">diff</div>
+                    </div>
                   </div>
                   <div class="metrics">
                     <div class="metric"><span>CLIP</span><b>{{ p.metrics?.clip?.toFixed(1) ?? '—' }}</b></div>
