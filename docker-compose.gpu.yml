@@ -1,13 +1,17 @@
 services:
-  car-similarity-app:
-    gpus: all
+  similarity-backend:
     build:
       args:
-        TORCH_VERSION: ${TORCH_VERSION:-2.8.0+cu128}
-        TORCHVISION_VERSION: ${TORCHVISION_VERSION:-0.23.0+cu128}
+        TORCH_SPEC: ${TORCH_SPEC:-torch==2.8.0+cu128}
+        TORCHVISION_SPEC: ${TORCHVISION_SPEC:-torchvision==0.23.0+cu128}
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://mirrors.aliyun.com/pytorch-wheels/cu128}
-        EXPECT_CUDA_VERSION: ${EXPECT_CUDA_VERSION:-12.8}
-        CONSTRAINTS_FILE: ${CONSTRAINTS_FILE:-constraints-cu128.txt}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     environment:
-      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility

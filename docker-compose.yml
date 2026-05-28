@@ -1,39 +1,33 @@
 services:
-  car-similarity-app:
+  similarity-backend:
     build:
       context: .
+      dockerfile: Dockerfile
+      target: backend
       args:
         DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://mirrors.aliyun.com/debian}
         DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://mirrors.aliyun.com/debian-security}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
-        TORCH_VERSION: ${TORCH_VERSION:-2.8.0}
-        TORCHVISION_VERSION: ${TORCHVISION_VERSION:-0.23.0}
+        TORCH_SPEC: ${TORCH_SPEC:-torch==2.8.0}
+        TORCHVISION_SPEC: ${TORCHVISION_SPEC:-torchvision==0.23.0}
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://mirrors.aliyun.com/pytorch-wheels/cpu}
-        EXPECT_CUDA_VERSION: ${EXPECT_CUDA_VERSION:-}
-        CONSTRAINTS_FILE: ${CONSTRAINTS_FILE:-constraints-cpu.txt}
-    image: car-similarity-app:latest
-    container_name: car-similarity-app
-    restart: unless-stopped
-    environment:
-      TZ: Asia/Shanghai
-      PYTHONUNBUFFERED: "1"
-      STREAMLIT_SERVER_HEADLESS: "true"
     volumes:
       - ./models:/app/models:ro
-      - ./configs:/app/configs:ro
       - ./img:/app/img
       - ./result:/app/result
-    expose:
-      - "8502"
-
-  car-similarity-nginx:
-    image: nginx:1.27-alpine
-    container_name: car-similarity-nginx
+      - ./configs:/app/configs:ro
     restart: unless-stopped
+    expose:
+      - "8000"
+
+  similarity-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
     depends_on:
-      - car-similarity-app
+      - similarity-backend
     ports:
-      - "53380:80"
-    volumes:
-      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - "53378:80"
+    restart: unless-stopped

@@ -5,7 +5,7 @@ This project uses Docker Compose with an Nginx reverse proxy.
 External port:
 
 ```bash
-http://SERVER_IP:53380
+http://SERVER_IP:53378
 ```
 
 ## Directory layout on server
@@ -27,25 +27,13 @@ img/front/
 
 ## Start
 
-Direct Streamlit mode, recommended if the Nginx reverse proxy blocks WebSocket:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.direct.yml up -d --build
-```
-
-Direct Streamlit mode with GPU:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.direct.yml up -d --build
-```
-
-Nginx reverse proxy mode:
+CPU-only mode (default):
 
 ```bash
 docker compose up -d --build
 ```
 
-Nginx reverse proxy mode with GPU:
+GPU mode:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
@@ -110,20 +98,8 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml down
 docker compose up -d
 ```
 
-If the browser stays on the Streamlit skeleton page and DevTools reports
-`WebSocket connection to ... /_stcore/stream failed`, switch to direct mode:
-
-```bash
-docker compose down
-docker compose -f docker-compose.yml -f docker-compose.direct.yml up -d
-```
-
-For GPU direct mode:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml down
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.direct.yml up -d
-```
+If the GPU container startup reports `failed to discover GPU vendor from CDI`, first verify the
+host GPU runtime:
 
 ## Build mirrors
 
@@ -164,6 +140,6 @@ docker compose down
 
 ## Notes
 
-- Nginx listens on host port `53380` and proxies to Streamlit on container port `8502`.
+- Nginx listens on host port `53378`, serves `web/` build output, and proxies `/api` + `/assets` to FastAPI (`similarity-backend:8000`).
 - `models`, `img`, and `result` are not baked into the image. They are mounted from the host.
 - Increase `client_max_body_size` in `deploy/nginx/default.conf` if uploads exceed 250 MB.

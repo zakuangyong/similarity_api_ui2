@@ -1,20 +1,15 @@
 .git
-.venv
-venv
-__pycache__
-*.py[cod]
-.pytest_cache
-.mypy_cache
+.idea
+.vscode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
 
-models
-img
-result
+models/
+img/
+result/
 
-*.pt
-*.pth
-*.onnx
-*.engine
-*.safetensors
-
-.env
-docker-compose*.override.yml
+web/node_modules/
+web/dist/

@@ -1,73 +1,59 @@
-FROM python:3.11-slim-bookworm
+ARG PY_IMAGE=python:3.10-slim-bullseye
+ARG NODE_IMAGE=node:20-alpine
+ARG NGINX_IMAGE=nginx:1.27-alpine
+
+FROM ${PY_IMAGE} AS backend
 
 ARG DEBIAN_MIRROR=http://mirrors.aliyun.com/debian
 ARG DEBIAN_SECURITY_MIRROR=http://mirrors.aliyun.com/debian-security
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
 ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
-ARG TORCH_VERSION=2.8.0
-ARG TORCHVISION_VERSION=0.23.0
+ARG TORCH_SPEC=torch==2.8.0
+ARG TORCHVISION_SPEC=torchvision==0.23.0
 ARG TORCH_INDEX_URL=https://mirrors.aliyun.com/pytorch-wheels/cpu
-ARG EXPECT_CUDA_VERSION=
-ARG CONSTRAINTS_FILE=constraints-cpu.txt
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_INDEX_URL=${PIP_INDEX_URL} \
-    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
-    PIP_DEFAULT_TIMEOUT=120 \
-    PIP_RETRIES=10 \
-    STREAMLIT_SERVER_HEADLESS=true
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+RUN set -eux; \
+    sed -i "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" /etc/apt/sources.list; \
+    sed -i "s|http://security.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" /etc/apt/sources.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      libgl1 \
+      libglib2.0-0 \
+    ; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+COPY backend/requirements.txt /app/backend/requirements.txt
 RUN set -eux; \
-    sed -i \
-        -e "s|http://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" \
-        -e "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" \
-        /etc/apt/sources.list.d/debian.sources; \
-    apt-get update \
-    && apt-get install -y --no-install-recommends \
-        libgl1 \
-        libglib2.0-0 \
-        libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    python -m pip install --upgrade pip; \
+    pip install --no-cache-dir -i "${PIP_INDEX_URL}" --trusted-host "${PIP_TRUSTED_HOST}" -r /app/backend/requirements.txt; \
+    pip install --no-cache-dir -i "${PIP_INDEX_URL}" --trusted-host "${PIP_TRUSTED_HOST}" --extra-index-url "${TORCH_INDEX_URL}" "${TORCH_SPEC}" "${TORCHVISION_SPEC}"
 
-COPY requirements.txt constraints-cu128.txt constraints-cpu.txt ./
-RUN python -m pip config set global.index-url "${PIP_INDEX_URL}" \
-    && python -m pip config set global.trusted-host "${PIP_TRUSTED_HOST}" \
-    && python -m pip config set global.timeout "120" \
-    && python -m pip config set global.retries "10" \
-    && python -m pip install --upgrade pip setuptools wheel \
-        --index-url "${PIP_INDEX_URL}" \
-        --trusted-host "${PIP_TRUSTED_HOST}"
+COPY . /app
 
-RUN pip install \
-        "torch==${TORCH_VERSION}" \
-        "torchvision==${TORCHVISION_VERSION}" \
-        --index-url "${PIP_INDEX_URL}" \
-        --find-links "${TORCH_INDEX_URL}" \
-        --trusted-host "${PIP_TRUSTED_HOST}" \
-    && EXPECT_CUDA_VERSION="${EXPECT_CUDA_VERSION}" python -c "import os, torch; exp=os.environ.get('EXPECT_CUDA_VERSION','').strip(); print('build torch cuda:', torch.version.cuda); assert (torch.version.cuda == exp) if exp else (torch.version.cuda is None), torch.version.cuda"
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-RUN pip install -r requirements.txt \
-        -c "${CONSTRAINTS_FILE}" \
-        --index-url "${PIP_INDEX_URL}" \
-        --find-links "${TORCH_INDEX_URL}" \
-        --trusted-host "${PIP_TRUSTED_HOST}" \
-    && EXPECT_CUDA_VERSION="${EXPECT_CUDA_VERSION}" python -c "import os, torch; exp=os.environ.get('EXPECT_CUDA_VERSION','').strip(); print('final torch cuda:', torch.version.cuda); assert (torch.version.cuda == exp) if exp else (torch.version.cuda is None), torch.version.cuda" \
-    && python -m pip check
 
-COPY app.py similarity_pipeline.py ./
-COPY configs ./configs
-COPY tools ./tools
-COPY .streamlit ./.streamlit
+FROM ${NODE_IMAGE} AS frontend-build
 
-RUN mkdir -p /app/models /app/img/front /app/result
+WORKDIR /src/web
 
-EXPOSE 8502
+COPY web/package.json web/pnpm-lock.yaml /src/web/
+RUN corepack enable && pnpm install --frozen-lockfile
 
-HEALTHCHECK --interval=30s --timeout=8s --start-period=60s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8502/_stcore/health', timeout=5)"
+COPY web/ /src/web/
+RUN VITE_USE_MOCK=false pnpm build
 
-CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8502", "--server.headless=true", "--server.fileWatcherType=none", "--server.maxUploadSize=200"]
+
+FROM ${NGINX_IMAGE} AS frontend
+
+COPY --from=frontend-build /src/web/dist /usr/share/nginx/html
+COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80

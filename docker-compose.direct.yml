@@ -1,8 +1,0 @@
-services:
-  car-similarity-app:
-    ports:
-      - "53380:8502"
-
-  car-similarity-nginx:
-    profiles:
-      - nginx
