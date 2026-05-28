@@ -23,6 +23,7 @@ from tools.cdse_similarity import (
     merged_overall_weights,
     part_feature_weights_for,
 )
+from tools.contour_similarity import contour_score_and_vis
 from tools.cutout_by_sam import run_cutout_by_sam
 
 
@@ -274,33 +275,6 @@ def _largest_car_mask(model: YOLO, image_bgr: np.ndarray) -> np.ndarray | None:
     return mask > 0.5
 
 
-def _crop_mask(mask: np.ndarray) -> np.ndarray | None:
-    ys, xs = np.where(mask > 0)
-    if len(xs) == 0 or len(ys) == 0:
-        return None
-    return mask[int(ys.min()) : int(ys.max()) + 1, int(xs.min()) : int(xs.max()) + 1]
-
-
-def _contour_score_and_vis(query_mask: np.ndarray, candidate_mask: np.ndarray) -> tuple[float, np.ndarray] | None:
-    q = _crop_mask(query_mask)
-    c = _crop_mask(candidate_mask)
-    if q is None or c is None:
-        return None
-    c_resized = cv2.resize(c.astype(np.uint8), (q.shape[1], q.shape[0]), interpolation=cv2.INTER_NEAREST) > 0
-    q_bool = q > 0
-    union = np.logical_or(q_bool, c_resized)
-    if not np.any(union):
-        return None
-    overlap = np.logical_and(q_bool, c_resized)
-    score = float(np.sum(overlap) / np.sum(union) * 100.0)
-
-    vis = np.zeros((q.shape[0], q.shape[1], 3), dtype=np.uint8)
-    vis[q_bool] = [0, 0, 255]
-    vis[c_resized] = [0, 255, 0]
-    vis[overlap] = [0, 255, 255]
-    return round(max(0.0, min(99.0, score)), 1), vis
-
-
 def _run_contour_compare(
     *,
     items: list[ImageItem],
@@ -309,6 +283,7 @@ def _run_contour_compare(
     config: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     model = YOLO(str(_config_path(config, "contour_weight")))
+    contour_cfg = config.get("contour") or {}
     masks: dict[str, np.ndarray | None] = {}
     for item in items:
         img = _imread_cn(item.staged_path)
@@ -325,7 +300,7 @@ def _run_contour_compare(
         if query_mask is None or cand_mask is None:
             out[item.item_id] = {"score": None, "diff_image": None, "status": "car mask missing"}
             continue
-        scored = _contour_score_and_vis(query_mask, cand_mask)
+        scored = contour_score_and_vis(query_mask, cand_mask, contour_cfg=contour_cfg)
         if scored is None:
             out[item.item_id] = {"score": None, "diff_image": None, "status": "empty mask"}
             continue

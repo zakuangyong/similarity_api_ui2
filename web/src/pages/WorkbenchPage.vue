@@ -178,7 +178,6 @@ function scoreTagText(score: number) {
         <div class="topk-row">
           <div>
               <div class="label topk-label">返回结果Top-N</div>
-            <div class="hint">返回最相似的前 N 张候选图。</div>
           </div>
             <input v-model.number="topk" class="topk-input" type="number" inputmode="numeric" min="1" max="10" step="1" :disabled="loading" />
         </div>

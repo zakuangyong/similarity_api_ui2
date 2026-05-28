@@ -44,6 +44,7 @@
   display: grid;
   gap: 12px;
   justify-items: center;
+  position: relative;
 }
 
 .upload-preview img {
@@ -335,6 +336,11 @@ h1 {
   font-weight: 900;
 }
 
+.sidebar .label.topk-label {
+  font-size: 16px;
+  white-space: nowrap;
+}
+
 .big-score {
   font-size: 42px;
   font-weight: 1000;
@@ -541,6 +547,7 @@ h2 {
 
 .image-card {
   overflow: hidden;
+  position: relative;
 }
 
 .image-card.large {
@@ -564,6 +571,7 @@ h2 {
   font-size: 13px;
   font-weight: 900;
   padding: 9px 11px;
+  text-align: center;
 }
 
 #contour .image-caption {
@@ -575,6 +583,7 @@ h2 {
   display: block;
   width: fit-content;
   max-width: 100%;
+  position: relative;
 }
 
 .diff-map img {
@@ -671,6 +680,80 @@ h2 {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
+}
+
+.zoom-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  opacity: 0.35;
+  transition: opacity 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.1s ease;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.zoom-btn:hover {
+  opacity: 1;
+}
+
+.zoom-btn:active {
+  transform: translateY(1px);
+}
+
+.zoom-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.zoom-image {
+  max-width: min(1200px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #05080c;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
+}
+
+.zoom-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(5, 8, 12, 0.7);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.zoom-close:hover {
+  background: rgba(5, 8, 12, 0.86);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .part-tile img,

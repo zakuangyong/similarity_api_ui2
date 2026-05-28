@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { ZoomIn, X } from 'lucide-vue-next'
 import { RouterLink, useRoute } from 'vue-router'
 import { getCandidateDetail } from '@/api/client'
 import type { CandidateDetailResponse, ScoreTag } from '@/api/types'
@@ -23,12 +24,41 @@ const filteredEvidence = computed(() => {
   return list.filter((p) => p.part_name !== '机盖')
 })
 
+const zoomOpen = ref(false)
+const zoomUrl = ref('')
+const zoomAlt = ref('')
+
+function openZoom(url: string, alt: string) {
+  if (!url) return
+  zoomUrl.value = url
+  zoomAlt.value = alt
+  zoomOpen.value = true
+  document.documentElement.style.overflow = 'hidden'
+}
+
+function closeZoom() {
+  zoomOpen.value = false
+  zoomUrl.value = ''
+  zoomAlt.value = ''
+  document.documentElement.style.overflow = ''
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeZoom()
+}
+
 onMounted(async () => {
+  window.addEventListener('keydown', onKeydown)
   try {
     data.value = await getCandidateDetail(runId.value, candidateId.value)
   } catch {
     data.value = null
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  document.documentElement.style.overflow = ''
 })
 
 function tagClass(tag: ScoreTag) {
@@ -74,13 +104,11 @@ function cropClass(partName: string) {
 
         <div class="control">
           <div class="select-like">车型选择 <span aria-hidden="true"></span></div>
-          <div class="hint">用于限制候选图库范围，减少无关车辆干扰。</div>
         </div>
 
         <div class="topk-row">
           <div>
-            <div class="label">返回结果Top-N</div>
-            <div class="hint">返回最相似的前 N 张候选图。</div>
+            <div class="label topk-label">返回结果Top-N</div>
           </div>
           <div class="number-like">10</div>
         </div>
@@ -185,10 +213,26 @@ function cropClass(partName: string) {
                 <div class="parts-image-pair">
                   <figure class="image-card">
                     <img :src="data?.parts.a_annotation_url ?? '/prototype-assets/A_annotation.jpg'" alt="A 图部件识别标注" />
+                    <button
+                      class="zoom-btn"
+                      type="button"
+                      aria-label="放大图片"
+                      @click="openZoom(data?.parts.a_annotation_url ?? '/prototype-assets/A_annotation.jpg', 'A 图部件识别标注')"
+                    >
+                      <ZoomIn class="zoom-icon" />
+                    </button>
                     <figcaption class="image-caption">A 图部件识别</figcaption>
                   </figure>
                   <figure class="image-card">
                     <img :src="data?.parts.b_annotation_url ?? '/prototype-assets/B_annotation.jpg'" alt="B 图部件识别标注" />
+                    <button
+                      class="zoom-btn"
+                      type="button"
+                      aria-label="放大图片"
+                      @click="openZoom(data?.parts.b_annotation_url ?? '/prototype-assets/B_annotation.jpg', 'B 图部件识别标注')"
+                    >
+                      <ZoomIn class="zoom-icon" />
+                    </button>
                     <figcaption class="image-caption">B 图部件识别</figcaption>
                   </figure>
                 </div>
@@ -201,14 +245,47 @@ function cropClass(partName: string) {
                     <div :class="partBadgeClass(p.tag)">{{ p.tag }}</div>
                   </div>
                   <div class="tiles">
-                    <div class="part-tile"><img :class="cropClass(p.part_name)" :src="p.tiles.a_color" :alt="`A color ${p.part_name}`" /><div class="part-caption">A color</div></div>
-                    <div class="part-tile"><img :class="cropClass(p.part_name)" :src="p.tiles.b_color" :alt="`B color ${p.part_name}`" /><div class="part-caption">B color</div></div>
-                    <div class="part-tile"><img :class="cropClass(p.part_name)" :src="p.tiles.a_gray" :alt="`A gray ${p.part_name}`" /><div class="part-caption">A gray</div></div>
-                    <div class="part-tile"><img :class="cropClass(p.part_name)" :src="p.tiles.b_gray" :alt="`B gray ${p.part_name}`" /><div class="part-caption">B gray</div></div>
                     <div class="part-tile">
-                      <img v-if="p.tiles.diff" :src="p.tiles.diff" :alt="`diff ${p.part_name}`" />
+                      <img :class="cropClass(p.part_name)" :src="p.tiles.a_color" :alt="`A 原图 ${p.part_name}`" />
+                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.a_color, `A 原图 ${p.part_name}`)">
+                        <ZoomIn class="zoom-icon" />
+                      </button>
+                      <div class="part-caption">A 原图</div>
+                    </div>
+                    <div class="part-tile">
+                      <img :class="cropClass(p.part_name)" :src="p.tiles.b_color" :alt="`B 原图 ${p.part_name}`" />
+                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.b_color, `B 原图 ${p.part_name}`)">
+                        <ZoomIn class="zoom-icon" />
+                      </button>
+                      <div class="part-caption">B 原图</div>
+                    </div>
+                    <div class="part-tile">
+                      <img :class="cropClass(p.part_name)" :src="p.tiles.a_gray" :alt="`A 灰度图 ${p.part_name}`" />
+                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.a_gray, `A 灰度图 ${p.part_name}`)">
+                        <ZoomIn class="zoom-icon" />
+                      </button>
+                      <div class="part-caption">A 灰度图</div>
+                    </div>
+                    <div class="part-tile">
+                      <img :class="cropClass(p.part_name)" :src="p.tiles.b_gray" :alt="`B 灰度图 ${p.part_name}`" />
+                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.b_gray, `B 灰度图 ${p.part_name}`)">
+                        <ZoomIn class="zoom-icon" />
+                      </button>
+                      <div class="part-caption">B 灰度图</div>
+                    </div>
+                    <div class="part-tile">
+                      <img v-if="p.tiles.diff" :src="p.tiles.diff" :alt="`内部差异 ${p.part_name}`" />
                       <div v-else class="tile-diff"></div>
-                      <div class="part-caption">diff</div>
+                      <button
+                        v-if="p.tiles.diff"
+                        class="zoom-btn"
+                        type="button"
+                        aria-label="放大图片"
+                        @click="openZoom(p.tiles.diff, `内部差异 ${p.part_name}`)"
+                      >
+                        <ZoomIn class="zoom-icon" />
+                      </button>
+                      <div class="part-caption">内部差异</div>
                     </div>
                   </div>
                   <div class="metrics">
@@ -224,6 +301,15 @@ function cropClass(partName: string) {
         </div>
       </section>
     </section>
+
+    <Teleport to="body">
+      <div v-if="zoomOpen" class="zoom-overlay" role="dialog" aria-modal="true" @click.self="closeZoom">
+        <button class="zoom-close" type="button" aria-label="关闭" @click="closeZoom">
+          <X class="zoom-icon" />
+        </button>
+        <img class="zoom-image" :src="zoomUrl" :alt="zoomAlt || '预览图片'" />
+      </div>
+    </Teleport>
   </main>
 </template>
 
