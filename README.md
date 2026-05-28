@@ -53,3 +53,10 @@ CPU 环境下 BiRefNet 会明显偏慢；调试页面流程时可以勾选“跳
 - `models/dino/`: DINOv2 本地仓库和权重。
 - `models/clip-vit-large-patch14/`: CLIP 最小可运行本地文件。
 - `models/yolov8n-seg.pt`: 整车轮廓分割。
+
+## Docker 构建（避免 segment-anything 下载超时）
+
+Docker 构建时如果无法稳定访问 GitHub，可以把 `segment-anything` 的源码 zip 预先放到项目内，Dockerfile 会优先走本地安装。
+
+- 下载：`https://github.com/facebookresearch/segment-anything/archive/refs/heads/main.zip`
+- 保存到：`vendor/segment-anything-main.zip`

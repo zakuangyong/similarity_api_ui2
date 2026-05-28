@@ -30,9 +30,16 @@ RUN set -eux; \
 WORKDIR /app
 
 COPY backend/requirements.txt /app/backend/requirements.txt
+COPY backend/requirements.core.txt /app/backend/requirements.core.txt
+COPY vendor/ /app/vendor/
 RUN set -eux; \
     python -m pip install --upgrade pip; \
-    pip install --no-cache-dir -i "${PIP_INDEX_URL}" --trusted-host "${PIP_TRUSTED_HOST}" -r /app/backend/requirements.txt; \
+    pip install --no-cache-dir -i "${PIP_INDEX_URL}" --trusted-host "${PIP_TRUSTED_HOST}" -r /app/backend/requirements.core.txt; \
+    if [ -f /app/vendor/segment-anything-main.zip ]; then \
+      pip install --no-cache-dir /app/vendor/segment-anything-main.zip; \
+    else \
+      pip install --no-cache-dir "segment-anything @ https://github.com/facebookresearch/segment-anything/archive/refs/heads/main.zip"; \
+    fi; \
     pip install --no-cache-dir -i "${PIP_INDEX_URL}" --trusted-host "${PIP_TRUSTED_HOST}" --extra-index-url "${TORCH_INDEX_URL}" "${TORCH_SPEC}" "${TORCHVISION_SPEC}"
 
 COPY . /app
