@@ -46,7 +46,7 @@ The CPU-only mode (default) pins PyTorch to CPU wheels:
 ```text
 torch==2.8.0
 torchvision==0.23.0
-TORCH_INDEX_URL=https://mirrors.aliyun.com/pytorch-wheels/cpu
+TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 ```
 
 The GPU mode pins PyTorch to CUDA 12.8 wheels:
@@ -54,7 +54,7 @@ The GPU mode pins PyTorch to CUDA 12.8 wheels:
 ```text
 torch==2.8.0+cu128
 torchvision==0.23.0+cu128
-TORCH_INDEX_URL=https://mirrors.aliyun.com/pytorch-wheels/cu128
+TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128
 ```
 
 This matches hosts where `nvidia-smi` reports `CUDA Version: 12.8`, such as

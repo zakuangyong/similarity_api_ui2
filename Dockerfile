@@ -42,10 +42,12 @@ CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port
 
 FROM ${NODE_IMAGE} AS frontend-build
 
+ARG PNPM_VERSION=10.17.0
+
 WORKDIR /src/web
 
 COPY web/package.json web/pnpm-lock.yaml /src/web/
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate && pnpm install --frozen-lockfile
 
 COPY web/ /src/web/
 RUN VITE_USE_MOCK=false pnpm build
