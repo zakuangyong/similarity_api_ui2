@@ -10,7 +10,7 @@ ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
 ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 ARG TORCH_SPEC=torch==2.8.0
 ARG TORCHVISION_SPEC=torchvision==0.23.0
-ARG TORCH_INDEX_URL=https://mirrors.aliyun.com/pytorch-wheels/cpu
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

@@ -11,7 +11,7 @@ services:
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
         TORCH_SPEC: ${TORCH_SPEC:-torch==2.8.0}
         TORCHVISION_SPEC: ${TORCHVISION_SPEC:-torchvision==0.23.0}
-        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://mirrors.aliyun.com/pytorch-wheels/cpu}
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     volumes:
       - ./models:/app/models:ro
       - ./img:/app/img
