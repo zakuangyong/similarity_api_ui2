@@ -29,5 +29,5 @@ services:
     depends_on:
       - similarity-backend
     ports:
-      - "53378:80"
+      - "53380:80"
     restart: unless-stopped
