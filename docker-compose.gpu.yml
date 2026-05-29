@@ -5,10 +5,7 @@ services:
         TORCH_SPEC: ${TORCH_SPEC:-torch==2.8.0+cu128}
         TORCHVISION_SPEC: ${TORCHVISION_SPEC:-torchvision==0.23.0+cu128}
         TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}
-    device_requests:
-      - driver: nvidia
-        count: all
-        capabilities: [gpu]
+    gpus: all
     deploy:
       resources:
         reservations:
