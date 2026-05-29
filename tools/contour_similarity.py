@@ -124,6 +124,11 @@ def contour_score_and_vis(
     if score_scale > 0:
         score *= score_scale
 
+    gamma = float(cfg.get("calibration_gamma", 1.0))
+    if gamma > 0 and abs(gamma - 1.0) > 1e-6:
+        capped = max(0.0, min(99.0, float(score)))
+        score = 99.0 * ((capped / 99.0) ** gamma)
+
     vis = np.zeros((q.shape[0], q.shape[1], 3), dtype=np.uint8)
     vis[q_bool] = [0, 0, 255]
     vis[c_aligned] = [0, 255, 0]

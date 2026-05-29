@@ -11,10 +11,10 @@ const viewOptions = [
   { label: '尾部视图', value: 'rear' },
 ]
 
-const vehicleOptions = ['SUV', '轿车', '轿跑', '越野', 'MPV', '皮卡']
+const vehicleOptions = ['轿车', 'SUV', '轿跑', '越野', 'MPV', '皮卡']
 
 const view = ref(viewOptions[0]!.value)
-const vehicleType = ref(vehicleOptions[0]!)
+const vehicleType = ref('轿车')
 const topk = ref(10)
 
 const fileInputEl = ref<HTMLInputElement | null>(null)
