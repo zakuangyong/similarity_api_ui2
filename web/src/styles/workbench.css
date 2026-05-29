@@ -37,7 +37,7 @@ p {
 }
 
 h1 {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.2;
   letter-spacing: 0.02em;
   color: rgba(237, 244, 255, 0.96);
@@ -50,7 +50,7 @@ h2 {
 }
 
 .field-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: rgba(237, 244, 255, 0.88);
@@ -135,7 +135,7 @@ h2 {
 
 .select-label {
   color: rgba(237, 244, 255, 0.7);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   white-space: nowrap;
@@ -154,7 +154,7 @@ h2 {
   color: rgba(237, 244, 255, 0.9);
   appearance: none;
   padding: 0 38px 0 14px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -196,7 +196,7 @@ h2 {
   border-radius: 8px;
   color: rgba(237, 244, 255, 0.9);
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   outline: none;
 }
@@ -238,13 +238,13 @@ h2 {
 
 .label {
   color: rgba(237, 244, 255, 0.7);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
 }
 
 .topk-label {
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
 .hint {
