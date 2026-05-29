@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
   return {
     build: {
       sourcemap: 'hidden',
+      assetsDir: 'ui-assets',
     },
     server: {
       proxy: {
