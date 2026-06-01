@@ -171,9 +171,6 @@ def _run_yolo_part_export(
         if not results:
             continue
         raw = car_front_seg.unwrap_instances(results[0])
-        for inst in raw:
-            name = str(car_front_seg._inst_get(inst, "name") or "")
-            inst["name"] = "hood" if name == "front_bumper" else name
         processed = car_front_seg.postprocess_instances(
             raw,
             car_front_seg.RULES,

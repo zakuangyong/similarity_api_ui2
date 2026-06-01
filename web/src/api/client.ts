@@ -8,6 +8,19 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, init)
   if (!res.ok) {
     const raw = await res.text().catch(() => '')
+    const html = raw.trim().toLowerCase()
+    if (html.startsWith('<!doctype html') || html.startsWith('<html')) {
+      if (html.includes('504 gateway time-out') || html.includes('504 gateway timeout')) {
+        throw new Error('后端网关超时（504）：比对耗时过长或服务不可达，请稍后重试。')
+      }
+      if (html.includes('502 bad gateway')) {
+        throw new Error('后端网关错误（502）：后端服务不可用或代理配置异常。')
+      }
+      if (html.includes('503 service temporarily unavailable') || html.includes('503 service unavailable')) {
+        throw new Error('后端服务不可用（503）：后端正在重启或过载，请稍后重试。')
+      }
+      throw new Error(`请求失败（HTTP ${res.status}）：后端返回了 HTML 错误页。`)
+    }
     try {
       const obj = JSON.parse(raw) as { detail?: unknown }
       if (obj && typeof obj === 'object' && 'detail' in obj && obj.detail) {

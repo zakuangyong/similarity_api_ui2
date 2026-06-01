@@ -1,6 +1,6 @@
 {
   "models": {
-    "front_part_weight": "models/yolo-seg/yolov11m-seg-front-5label-2000.pt",
+    "front_part_weight": "models/yolo-seg/yolo11m-seg-front-6label-2000.pt",
     "carpart_weight": "models/yolo-seg/yolo11m-seg-carpart-epoch70.pt",
     "contour_weight": "models/yolov8n-seg.pt",
     "birefnet_model": "models/BiRefNet",
@@ -12,6 +12,7 @@
   "parts": [
     "front_glass",
     "front_right_light",
+    "front_bumper",
     "grille",
     "hood",
     "right_mirror"
@@ -43,6 +44,12 @@
       "ssim": 0.40,
       "edge": 0.10
     },
+    "front_bumper": {
+      "clip": 0.25,
+      "dino": 0.35,
+      "ssim": 0.15,
+      "edge": 0.25
+    },
     "grille": {
       "clip": 0.25,
       "dino": 0.35,
@@ -65,6 +72,7 @@
   "part_overall_weights": {
     "front_glass": 0.15,
     "front_right_light": 0.22,
+    "front_bumper": 0.18,
     "grille": 0.18,
     "hood": 0.15,
     "right_mirror": 0.12

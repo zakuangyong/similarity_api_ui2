@@ -21,7 +21,7 @@ const queryName = computed(() => {
 const queryThumb = computed(() => data.value?.query.image_url || '')
 const filteredEvidence = computed(() => {
   const list = data.value?.parts.evidence ?? []
-  return list.filter((p) => p.part_name !== '机盖')
+  return list
 })
 
 const zoomOpen = ref(false)

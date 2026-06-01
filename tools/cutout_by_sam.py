@@ -13,9 +13,7 @@ from ultralytics import YOLO
 from tools import car_front_seg
 
 
-CLASS_NAME_REMAP = {
-    "front_bumper": "hood",
-}
+CLASS_NAME_REMAP: dict[str, str] = {}
 
 
 @dataclass(frozen=True)

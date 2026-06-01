@@ -7,11 +7,11 @@ import torch
 from dataclasses import dataclass
 from typing import Iterable, Literal, Optional, Union
 
-WEIGHTS = "models/yolo-seg/front-mirror-light-200epoch2.pt"
+WEIGHTS = "models/yolo-seg/yolo11m-seg-front-6label-2000.pt"
 DEFAULT_CONF = 0.25
 DEFAULT_IOU = 0.7
 DEFAULT_IMGSZ = 640
-DEFAULT_IMG_PATH = Path("img/")
+DEFAULT_IMG_PATH = Path("result/img-front/")
 DEFAULT_LABEL_DIR = Path("result/front_label/")
 DEFAULT_OUT_ROOT = Path("result/front_parts/")
 SIDE_X_MAX = 0.5
@@ -28,9 +28,10 @@ class PartRule:
 RULES = {
     "right_mirror": PartRule(name="right_mirror", side="left", max_instances=1, merge_mode="union"),
     "front_right_light": PartRule(name="front_right_light", side="left", max_instances=1, merge_mode="none"),
-    "hood": PartRule(name="hood", side="any", max_instances=1, merge_mode="none"),
-    "front_glass": PartRule(name="front_glass", side="any", max_instances=1, merge_mode="none"),
-    "grille": PartRule(name="grille", side="any", max_instances=1, merge_mode="none"),
+    "grille": PartRule(name="grille", max_instances=1),
+    "front_glass": PartRule(name="front_glass", max_instances=1),
+    "hood": PartRule(name="hood", max_instances=1),
+    "front_bumper": PartRule(name="front_bumper", max_instances=1),
 }
 
 def iter_images(path: Path) -> list[Path]:
@@ -409,6 +410,44 @@ def render_annotated_preview(img_bgr: np.ndarray, instances: Iterable, visual_la
             anchor = (int((x1 + x2) / 2), int((y1 + y2) / 2))
         if anchor is None:
             anchor = (0, 0)
+        if name == "front_bumper":
+            h, w = annotated.shape[:2]
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            scale = 0.6
+            thickness = 2
+            (tw, th), baseline = cv2.getTextSize(label, font, scale, thickness)
+            box_w = tw + 8
+            box_h = th + baseline + 8
+
+            ax, ay = anchor
+            if box_xyxy is not None:
+                x1, y1, x2, y2 = [float(v) for v in box_xyxy]
+                ax = int(x2)
+                ay = int((y1 + y2) / 2)
+            ax = max(0, min(int(ax), w - 1))
+            ay = max(0, min(int(ay), h - 1))
+
+            tx1 = int(max(0, min(w - box_w - 20, w * 0.80 - 60)))
+            ty1 = max(0, min(int(ay - 50 - box_h / 2), h - box_h))
+            rect = (tx1, ty1, tx1 + box_w, ty1 + box_h)
+            line_end = (tx1, ty1 + box_h // 2)
+
+            line_start = (max(0, min(w - 1, tx1 - 10)), max(0, min(h - 1, line_end[1] + 10)))
+            cv2.line(annotated, line_start, (max(0, ax - 60), ay), color, 2, cv2.LINE_AA)
+            cv2.rectangle(annotated, (rect[0], rect[1]), (rect[2], rect[3]), color, -1)
+            cv2.putText(
+                annotated,
+                label,
+                (tx1 + 4, ty1 + box_h - baseline - 3),
+                font,
+                scale,
+                (0, 0, 0),
+                thickness,
+                cv2.LINE_AA,
+            )
+            occupied_label_boxes.append(rect)
+            continue
+
         _draw_label(annotated, anchor, label, color, occupied_label_boxes)
     return annotated
 
@@ -433,15 +472,15 @@ def export_rgba_crops(img_bgr: np.ndarray, instances: Iterable, out_dir: Union[s
 
 def _build_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--img_dir", "--input-dir", dest="img_dir", default=str(DEFAULT_IMG_PATH))
-    parser.add_argument("--weights", "--weight", dest="weights", default=str(WEIGHTS))
+    parser.add_argument("--input-dir", "--img_dir", dest="input_dir", default=str(DEFAULT_IMG_PATH))
+    parser.add_argument("--weights", default=str(WEIGHTS))
     parser.add_argument("--conf", type=float, default=float(DEFAULT_CONF))
     parser.add_argument("--iou", type=float, default=float(DEFAULT_IOU))
     parser.add_argument("--imgsz", type=int, default=int(DEFAULT_IMGSZ))
     parser.add_argument("--side_x_max", type=float, default=float(SIDE_X_MAX))
-    parser.add_argument("--label_dir", default=str(DEFAULT_LABEL_DIR))
-    parser.add_argument("--out_root", default=str(DEFAULT_OUT_ROOT))
-    parser.add_argument("--output-dir", dest="output_dir", default=None)
+    parser.add_argument("--output-dir", dest="output_dir", default="result")
+    parser.add_argument("--label-dir", "--label_dir", dest="label_dir", default=None)
+    parser.add_argument("--out-root", "--out_root", dest="out_root", default=None)
     parser.add_argument("--no_labels", action="store_true")
     parser.add_argument("--no_crops", action="store_true")
     parser.add_argument("--visual_label_edge", action="store_true")
@@ -453,14 +492,10 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     from ultralytics import YOLO
 
-    img_dir = Path(args.img_dir)
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-        label_dir = output_dir / "front_label"
-        out_root = output_dir / "front_parts"
-    else:
-        label_dir = Path(args.label_dir)
-        out_root = Path(args.out_root)
+    img_dir = Path(args.input_dir)
+    output_dir = Path(args.output_dir)
+    label_dir = Path(args.label_dir) if args.label_dir else (output_dir / "front_label")
+    out_root = Path(args.out_root) if args.out_root else (output_dir / "front_parts")
     save_labels = not bool(args.no_labels)
     save_crops = not bool(args.no_crops)
     if save_labels:

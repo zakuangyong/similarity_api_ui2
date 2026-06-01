@@ -308,6 +308,7 @@ def score_tag(score: float | None) -> str:
 PART_LABELS = {
     "right_mirror": "后视镜",
     "front_right_light": "车灯",
+    "front_bumper": "前保险杠",
     "front_glass": "前挡风玻璃",
     "grille": "中网",
     "hood": "机盖",
