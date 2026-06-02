@@ -165,7 +165,79 @@ def _overlay_mask(
     img_bgr[:, :, :] = out.clip(0, 255).astype(np.uint8)
 
 
-def _mask_to_rgba_crop(img_bgr: np.ndarray, mask01: np.ndarray) -> Optional[np.ndarray]:
+def _fill_largest_external_contour(mask: np.ndarray) -> np.ndarray:
+    m = mask.astype(np.uint8)
+    if m.max() == 0:
+        return mask.astype(np.uint8)
+    contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return mask.astype(np.uint8)
+    largest = max(contours, key=cv2.contourArea)
+    filled = np.zeros_like(m, dtype=np.uint8)
+    cv2.drawContours(filled, [largest], -1, 1, thickness=-1)
+    return filled
+
+
+def _keep_largest_component(mask: np.ndarray) -> np.ndarray:
+    m = mask.astype(np.uint8)
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    if n_labels <= 1:
+        return m
+    largest_idx = int(1 + np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    return (labels == largest_idx).astype(np.uint8)
+
+
+def _fill_mask_holes(mask: np.ndarray) -> np.ndarray:
+    m = mask.astype(np.uint8)
+    if m.max() == 0:
+        return m
+    flood = m.copy()
+    h, w = flood.shape[:2]
+    cv2.floodFill(flood, np.zeros((h + 2, w + 2), dtype=np.uint8), (0, 0), 1)
+    holes = flood == 0
+    out = m.copy()
+    out[holes] = 1
+    return out.astype(np.uint8)
+
+
+def _trim_front_bumper_side_artifacts(mask: np.ndarray) -> np.ndarray:
+    m = mask.astype(np.uint8).copy()
+    if m.max() == 0:
+        return m
+    _, xs = np.where(m > 0)
+    if xs.size == 0:
+        return m
+    x1, x2 = int(xs.min()), int(xs.max())
+    width = x2 - x1 + 1
+    trim = int(round(width * 0.018))
+    trim = max(4, min(trim, 18))
+    if width <= trim * 4:
+        return m
+    m[:, x1 : x1 + trim] = 0
+    m[:, x2 - trim + 1 : x2 + 1] = 0
+    return m
+
+
+def _prepare_front_bumper_mask(mask: np.ndarray) -> np.ndarray:
+    m = _trim_front_bumper_side_artifacts(mask)
+    m = _keep_largest_component(m)
+    m = _fill_mask_holes(m)
+    m = cv2.erode(
+        m,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+        iterations=1,
+    )
+    if not np.any(m):
+        return mask.astype(np.uint8)
+    return m.astype(np.uint8)
+
+
+def _mask_to_rgba_crop(
+    img_bgr: np.ndarray,
+    mask01: np.ndarray,
+    *,
+    fill_external_contour: bool = False,
+) -> Optional[np.ndarray]:
     h, w = img_bgr.shape[:2]
     if mask01.ndim != 2:
         return None
@@ -196,6 +268,10 @@ def _mask_to_rgba_crop(img_bgr: np.ndarray, mask01: np.ndarray) -> Optional[np.n
         crop_fg = (m > 0.03).astype(np.uint8)
         if not np.any(crop_fg):
             return None
+
+    if fill_external_contour:
+        crop_fg = _prepare_front_bumper_mask(crop_fg)
+        m = crop_fg.astype(np.float32)
 
     ys, xs = np.where(crop_fg > 0)
     y1, y2 = int(ys.min()), int(ys.max()) + 1
@@ -461,7 +537,7 @@ def export_rgba_crops(img_bgr: np.ndarray, instances: Iterable, out_dir: Union[s
         mask01 = _as_mask01(_inst_get(inst, "mask01"))
         if mask01 is None:
             continue
-        rgba = _mask_to_rgba_crop(img_bgr, mask01)
+        rgba = _mask_to_rgba_crop(img_bgr, mask01, fill_external_contour=(name == "front_bumper"))
         if rgba is None:
             continue
 

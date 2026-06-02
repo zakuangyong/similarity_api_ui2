@@ -244,9 +244,31 @@ def _imread_cn(path: Path) -> np.ndarray | None:
     return cv2.imdecode(data, cv2.IMREAD_COLOR)
 
 
+def _alpha_mask_from_image(path: Path) -> np.ndarray | None:
+    data = np.fromfile(str(path), dtype=np.uint8)
+    if data.size == 0:
+        return None
+    img = cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
+    if img is None or img.ndim != 3 or img.shape[2] < 4:
+        return None
+    alpha = img[:, :, 3]
+    if not np.any(alpha > 0):
+        return None
+    return alpha > 0
+
+
 def _save_image(path: Path, img: np.ndarray) -> str:
     car_front_seg._imwrite_cn(path, img)
     return str(path)
+
+
+def _contour_preview(mask: np.ndarray) -> np.ndarray:
+    m = (mask > 0).astype(np.uint8)
+    preview = np.zeros((*m.shape[:2], 3), dtype=np.uint8)
+    preview[m > 0] = (48, 48, 48)
+    contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(preview, contours, -1, (255, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+    return preview
 
 
 def _largest_car_mask(model: YOLO, image_bgr: np.ndarray) -> np.ndarray | None:
@@ -263,10 +285,8 @@ def _largest_car_mask(model: YOLO, image_bgr: np.ndarray) -> np.ndarray | None:
             mask = cv2.resize(mask.astype(np.float32), (w, h), interpolation=cv2.INTER_NEAREST)
         return mask
 
-    results = model.predict(image_bgr, classes=[2, 3, 5, 7], conf=0.2, verbose=False)
+    results = model.predict(image_bgr, conf=0.2, verbose=False)
     mask = pick(results)
-    if mask is None:
-        mask = pick(model.predict(image_bgr, conf=0.2, verbose=False))
     if mask is None:
         return None
     return mask > 0.5
@@ -279,12 +299,18 @@ def _run_contour_compare(
     output_dir: Path,
     config: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    model = YOLO(str(_config_path(config, "contour_weight")))
+    model: YOLO | None = None
     contour_cfg = config.get("contour") or {}
     masks: dict[str, np.ndarray | None] = {}
     for item in items:
-        img = _imread_cn(item.staged_path)
-        masks[item.item_id] = None if img is None else _largest_car_mask(model, img)
+        mask = _alpha_mask_from_image(item.staged_path)
+        if mask is None:
+            img = _imread_cn(item.staged_path)
+            if img is not None:
+                if model is None:
+                    model = YOLO(str(_config_path(config, "contour_weight")))
+                mask = _largest_car_mask(model, img)
+        masks[item.item_id] = mask
 
     out: dict[str, dict[str, Any]] = {}
     contour_dir = output_dir / "contour"
@@ -301,9 +327,18 @@ def _run_contour_compare(
         if scored is None:
             out[item.item_id] = {"score": None, "diff_image": None, "status": "empty mask"}
             continue
-        score, vis = scored
-        img_path = contour_dir / f"{query_item.item_id}_vs_{item.item_id}.png"
-        out[item.item_id] = {"score": score, "diff_image": _save_image(img_path, vis), "status": "ok"}
+        score, vis, query_aligned, candidate_aligned = scored
+        pair_prefix = f"{query_item.item_id}_vs_{item.item_id}"
+        img_path = contour_dir / f"{pair_prefix}.png"
+        query_contour_path = contour_dir / f"{pair_prefix}_query_aligned_contour.png"
+        candidate_contour_path = contour_dir / f"{pair_prefix}_candidate_aligned_contour.png"
+        out[item.item_id] = {
+            "score": score,
+            "diff_image": _save_image(img_path, vis),
+            "query_aligned_contour_image": _save_image(query_contour_path, _contour_preview(query_aligned)),
+            "candidate_aligned_contour_image": _save_image(candidate_contour_path, _contour_preview(candidate_aligned)),
+            "status": "ok",
+        }
     return out
 
 
@@ -451,6 +486,8 @@ def _compare_parts(
             "overall_part_weights_used": overall_weights_used,
             "final_score_weights_used": final_parts,
             "contour_diff_image": contour_obj.get("diff_image"),
+            "query_aligned_contour_image": contour_obj.get("query_aligned_contour_image"),
+            "candidate_aligned_contour_image": contour_obj.get("candidate_aligned_contour_image"),
         }
         row["analysis"] = _analysis_for_item(row)
         return row

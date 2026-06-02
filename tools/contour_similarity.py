@@ -77,7 +77,7 @@ def contour_score_and_vis(
     candidate_mask: np.ndarray,
     *,
     contour_cfg: dict[str, Any] | None = None,
-) -> tuple[float, np.ndarray] | None:
+) -> tuple[float, np.ndarray, np.ndarray, np.ndarray] | None:
     cfg = contour_cfg or {}
     q = _crop_mask(query_mask)
     c = _crop_mask(candidate_mask)
@@ -134,4 +134,4 @@ def contour_score_and_vis(
     vis[c_aligned] = [0, 255, 0]
     overlap = np.logical_and(q_bool, c_aligned)
     vis[overlap] = [0, 255, 255]
-    return round(max(0.0, min(99.0, score)), 1), vis
+    return round(max(0.0, min(99.0, score)), 1), vis, q_bool, c_aligned

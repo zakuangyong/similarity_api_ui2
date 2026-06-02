@@ -23,7 +23,7 @@ const queryObjectUrl = ref<string | null>(null)
 
 const route = useRoute()
 const run = ref<CompareResponse | null>(null)
-const results = computed<CandidateCard[]>(() => (run.value?.results ?? []).slice(0, 10))
+const results = computed<CandidateCard[]>(() => (run.value?.results ?? []).slice(0, 20))
 
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
@@ -88,7 +88,7 @@ async function startCompare() {
   try {
     const k = Number(topk.value)
     const k1 = Number.isFinite(k) ? Math.floor(k) : 10
-    const k2 = Math.min(10, Math.max(1, k1))
+    const k2 = Math.min(20, Math.max(1, k1))
     topk.value = k2
     const resp = await compare({
       queryImage: queryFile.value ?? undefined,
@@ -179,7 +179,7 @@ function scoreTagText(score: number) {
           <div>
               <div class="label topk-label">返回结果Top-N</div>
           </div>
-            <input v-model.number="topk" class="topk-input" type="number" inputmode="numeric" min="1" max="10" step="1" :disabled="loading" />
+            <input v-model.number="topk" class="topk-input" type="number" inputmode="numeric" min="1" max="20" step="1" :disabled="loading" />
         </div>
 
         <button class="primary" type="button" :disabled="loading" @click="startCompare">开始比对</button>

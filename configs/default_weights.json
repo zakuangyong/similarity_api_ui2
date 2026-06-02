@@ -21,11 +21,11 @@
   "contour": {
     "keep_aspect": true,
     "align": "centroid",
-    "edge_weight": 0.6,
-    "edge_thickness": 4,
+    "edge_weight": 0.7,
+    "edge_thickness": 5,
     "aspect_penalty_k": 1.2,
-    "score_scale": 1.15,
-    "calibration_gamma": 0.75
+    "score_scale": 1.16,
+    "calibration_gamma": 0.70
   },
   "score_weights": {
     "contour": 0.4,

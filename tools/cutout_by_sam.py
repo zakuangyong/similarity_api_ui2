@@ -70,6 +70,19 @@ def _fill_largest_external_contour(mask: np.ndarray) -> np.ndarray:
     return filled.astype(bool)
 
 
+def _fill_mask_holes(mask: np.ndarray) -> np.ndarray:
+    m = mask.astype(np.uint8)
+    if m.max() == 0:
+        return m.astype(bool)
+    flood = m.copy()
+    h, w = flood.shape[:2]
+    cv2.floodFill(flood, np.zeros((h + 2, w + 2), dtype=np.uint8), (0, 0), 1)
+    holes = flood == 0
+    out = m.copy()
+    out[holes] = 1
+    return out.astype(bool)
+
+
 def _resize_mask01(mask01: np.ndarray | None, width: int, height: int) -> np.ndarray | None:
     if mask01 is None:
         return None
@@ -99,6 +112,33 @@ def _clean_grille_mask(
     m = cv2.dilate(m, np.ones((3, 3), np.uint8), iterations=1)
     m = _mask_inside_box(m.astype(bool), box)
     m = _fill_largest_external_contour(m)
+    m = _mask_inside_box(m, box)
+    return m.astype(bool)
+
+
+def _clean_front_bumper_mask(
+    *,
+    sam_mask: np.ndarray,
+    yolo_box: np.ndarray,
+    image_shape: tuple[int, int],
+    yolo_mask01: np.ndarray | None,
+) -> np.ndarray:
+    height, width = image_shape
+    yolo_mask01 = _resize_mask01(yolo_mask01, width, height)
+    box = _clip_box_to_image(yolo_box, width, height)
+
+    sam_limited = _mask_inside_box(sam_mask, box)
+    if yolo_mask01 is not None:
+        yolo_limited = _mask_inside_box(yolo_mask01 >= 0.5, box)
+        base = np.logical_or(sam_limited, yolo_limited)
+    else:
+        base = sam_limited
+
+    kernel = np.ones((5, 5), np.uint8)
+    m = cv2.morphologyEx(base.astype(np.uint8), cv2.MORPH_CLOSE, kernel, iterations=1)
+    m = _mask_inside_box(m.astype(bool), box)
+    m = _largest_component(m)
+    m = _fill_mask_holes(m)
     m = _mask_inside_box(m, box)
     return m.astype(bool)
 
@@ -238,6 +278,13 @@ def run_cutout_by_sam(
             name = str(car_front_seg._inst_get(inst, "name") or "")
             if name == "grille":
                 cleaned = _clean_grille_mask(
+                    sam_mask=sam_masks[j],
+                    yolo_box=np.asarray(box, dtype=np.float32),
+                    image_shape=rgb.shape[:2],
+                    yolo_mask01=yolo_mask01,
+                )
+            elif name == "front_bumper":
+                cleaned = _clean_front_bumper_mask(
                     sam_mask=sam_masks[j],
                     yolo_box=np.asarray(box, dtype=np.float32),
                     image_shape=rgb.shape[:2],

@@ -110,7 +110,7 @@ function cropClass(partName: string) {
           <div>
             <div class="label topk-label">返回结果Top-N</div>
           </div>
-          <div class="number-like">10</div>
+          <div class="number-like">20</div>
         </div>
 
         <button class="primary" type="button">开始比对</button>
@@ -247,44 +247,23 @@ function cropClass(partName: string) {
                   <div class="tiles">
                     <div class="part-tile">
                       <img :class="cropClass(p.part_name)" :src="p.tiles.a_color" :alt="`A 原图 ${p.part_name}`" />
-                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.a_color, `A 原图 ${p.part_name}`)">
-                        <ZoomIn class="zoom-icon" />
-                      </button>
                       <div class="part-caption">A 原图</div>
                     </div>
                     <div class="part-tile">
                       <img :class="cropClass(p.part_name)" :src="p.tiles.b_color" :alt="`B 原图 ${p.part_name}`" />
-                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.b_color, `B 原图 ${p.part_name}`)">
-                        <ZoomIn class="zoom-icon" />
-                      </button>
                       <div class="part-caption">B 原图</div>
                     </div>
                     <div class="part-tile">
                       <img :class="cropClass(p.part_name)" :src="p.tiles.a_gray" :alt="`A 灰度图 ${p.part_name}`" />
-                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.a_gray, `A 灰度图 ${p.part_name}`)">
-                        <ZoomIn class="zoom-icon" />
-                      </button>
                       <div class="part-caption">A 灰度图</div>
                     </div>
                     <div class="part-tile">
                       <img :class="cropClass(p.part_name)" :src="p.tiles.b_gray" :alt="`B 灰度图 ${p.part_name}`" />
-                      <button class="zoom-btn" type="button" aria-label="放大图片" @click="openZoom(p.tiles.b_gray, `B 灰度图 ${p.part_name}`)">
-                        <ZoomIn class="zoom-icon" />
-                      </button>
                       <div class="part-caption">B 灰度图</div>
                     </div>
                     <div class="part-tile">
                       <img v-if="p.tiles.diff" :src="p.tiles.diff" :alt="`内部差异 ${p.part_name}`" />
                       <div v-else class="tile-diff"></div>
-                      <button
-                        v-if="p.tiles.diff"
-                        class="zoom-btn"
-                        type="button"
-                        aria-label="放大图片"
-                        @click="openZoom(p.tiles.diff, `内部差异 ${p.part_name}`)"
-                      >
-                        <ZoomIn class="zoom-icon" />
-                      </button>
                       <div class="part-caption">内部差异</div>
                     </div>
                   </div>

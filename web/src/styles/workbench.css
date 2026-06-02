@@ -345,6 +345,8 @@ h2 {
 }
 
 .result-stage {
+  --candidate-card-w: 176px;
+  --candidate-col-gap: 16px;
   flex: 1;
   min-height: 0;
   margin: 0 30px 16px;
@@ -353,7 +355,7 @@ h2 {
   border-radius: 8px;
   padding: 18px 24px;
   display: grid;
-  grid-template-columns: minmax(300px, 390px) auto;
+  grid-template-columns: minmax(300px, 390px) minmax(0, calc(var(--candidate-card-w) * 4 + var(--candidate-col-gap) * 3));
   gap: 24px;
   align-items: center;
   justify-content: center;
@@ -465,16 +467,19 @@ h2 {
 
 .candidate-grid {
   display: grid;
-  grid-template-columns: repeat(2, 176px);
+  grid-template-columns: repeat(4, var(--candidate-card-w));
   grid-template-rows: repeat(5, auto);
   grid-auto-flow: column;
-  gap: 10px 16px;
+  gap: 10px var(--candidate-col-gap);
   justify-content: center;
+  min-width: 0;
 }
 
 .candidate-card {
   position: relative;
   display: block;
+  width: var(--candidate-card-w);
+  min-width: 0;
   background: rgba(21, 28, 37, 0.64);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
