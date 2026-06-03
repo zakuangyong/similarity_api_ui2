@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ZoomIn, X } from 'lucide-vue-next'
 import { RouterLink, useRoute } from 'vue-router'
 import { getCandidateDetail } from '@/api/client'
@@ -11,6 +11,8 @@ const runId = computed(() => String(route.params.runId || 'latest'))
 const candidateId = computed(() => String(route.params.candidateId || ''))
 
 const data = ref<CandidateDetailResponse | null>(null)
+const loading = ref(false)
+const errorMessage = ref<string | null>(null)
 const queryName = computed(() => {
   const q = route.query.q
   if (typeof q === 'string' && q.trim()) return q.trim()
@@ -49,12 +51,25 @@ function onKeydown(e: KeyboardEvent) {
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
-  try {
-    data.value = await getCandidateDetail(runId.value, candidateId.value)
-  } catch {
-    data.value = null
-  }
 })
+
+watch([runId, candidateId], async ([rid, cid]) => {
+  if (!cid) {
+    data.value = null
+    return
+  }
+  loading.value = true
+  errorMessage.value = null
+  data.value = null
+  try {
+    data.value = await getCandidateDetail(rid, cid)
+  } catch (e) {
+    data.value = null
+    errorMessage.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    loading.value = false
+  }
+}, { immediate: true })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
@@ -121,7 +136,17 @@ function cropClass(partName: string) {
           <h2>分析结果</h2>
         </div>
         <div class="detail-stage">
-          <div class="detail-canvas">
+          <div v-if="loading" class="loading-wrap" role="status" aria-live="polite">
+            <div class="loading-card">
+              <div class="loading-text">正在加载详情...</div>
+            </div>
+          </div>
+          <div v-else-if="errorMessage" class="loading-wrap" role="status">
+            <div class="loading-card">
+              <div class="loading-text">{{ errorMessage }}</div>
+            </div>
+          </div>
+          <div v-else-if="data" class="detail-canvas">
             <header class="topbar">
               <h1>A车 vs B车 相似度分析详情</h1>
               <RouterLink class="back" :to="{ name: 'workbench', query: { restore: '1' } }" aria-label="返回概览">返回概览</RouterLink>
