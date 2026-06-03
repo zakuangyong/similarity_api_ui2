@@ -17,7 +17,7 @@
     "hood",
     "right_mirror"
   ],
-  "features": "dino,ssim,edge",
+  "features": "clip,dino,ssim,edge",
   "contour": {
     "keep_aspect": true,
     "align": "centroid",
