@@ -464,6 +464,25 @@ def postprocess_instances(
     return out
 
 
+def detect_processed_instances(
+    *,
+    model,
+    rgb: np.ndarray,
+    conf: float,
+    iou: float,
+    imgsz: int,
+    allowed_parts: set[str] | None = None,
+) -> list[dict]:
+    results = model.predict(rgb, conf=conf, iou=iou, imgsz=imgsz, verbose=False)
+    if not results:
+        return []
+    raw = unwrap_instances(results[0])
+    processed = postprocess_instances(raw, RULES, side_x_max=SIDE_X_MAX, img_w=int(rgb.shape[1]))
+    if allowed_parts is not None:
+        processed = [x for x in processed if str(_inst_get(x, "name") or "") in allowed_parts]
+    return processed
+
+
 def render_annotated_preview(img_bgr: np.ndarray, instances: Iterable, visual_label_edge: bool = False) -> np.ndarray:
     annotated = img_bgr.copy()
     occupied_label_boxes: list[tuple[int, int, int, int]] = []

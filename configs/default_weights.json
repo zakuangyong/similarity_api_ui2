@@ -1,7 +1,6 @@
 {
   "models": {
     "front_part_weight": "models/yolo-seg/yolo11m-seg-front-6label-2000.pt",
-    "carpart_weight": "models/yolo-seg/yolo11m-seg-carpart-epoch70.pt",
     "contour_weight": "models/yolov8n-seg.pt",
     "birefnet_model": "models/BiRefNet",
     "cdse_model_dir": "models",
@@ -22,7 +21,10 @@
     "keep_aspect": true,
     "align": "centroid",
     "edge_weight": 0.7,
-    "edge_thickness": 5,
+    "edge_thickness": 8,
+    "bottom_edge_thickness": 12,
+    "bottom_region_y": 0.72,
+    "bottom_edge_weight": 0.15,
     "aspect_penalty_k": 1.2,
     "score_scale": 1.16,
     "calibration_gamma": 0.70

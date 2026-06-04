@@ -72,6 +72,15 @@ def _edge_band(mask: np.ndarray, *, thickness: int) -> np.ndarray:
     return grad > 0
 
 
+def _bottom_region_mask(shape: tuple[int, int], *, start_ratio: float) -> np.ndarray:
+    h, w = int(shape[0]), int(shape[1])
+    ratio = max(0.0, min(1.0, float(start_ratio)))
+    y0 = max(0, min(h, int(round(h * ratio))))
+    out = np.zeros((h, w), dtype=bool)
+    out[y0:h, :] = True
+    return out
+
+
 def contour_score_and_vis(
     query_mask: np.ndarray,
     candidate_mask: np.ndarray,
@@ -106,9 +115,28 @@ def contour_score_and_vis(
     thickness = int(cfg.get("edge_thickness", 4))
     score = score_fill
     if edge_weight > 0:
-        qe = _edge_band(q_bool, thickness=thickness)
-        ce = _edge_band(c_aligned, thickness=thickness)
-        score_edge = _iou_percent(qe, ce)
+        bottom_thickness = int(cfg.get("bottom_edge_thickness", thickness))
+        bottom_start = float(cfg.get("bottom_region_y", 1.0))
+        bottom_weight = max(0.0, min(1.0, float(cfg.get("bottom_edge_weight", 0.0))))
+        bottom_region = _bottom_region_mask(q_bool.shape, start_ratio=bottom_start)
+        non_bottom_region = ~bottom_region
+
+        qe_top = np.logical_and(_edge_band(q_bool, thickness=thickness), non_bottom_region)
+        ce_top = np.logical_and(_edge_band(c_aligned, thickness=thickness), non_bottom_region)
+        score_top_edge = _iou_percent(qe_top, ce_top)
+
+        qe_bottom = np.logical_and(_edge_band(q_bool, thickness=bottom_thickness), bottom_region)
+        ce_bottom = np.logical_and(_edge_band(c_aligned, thickness=bottom_thickness), bottom_region)
+        score_bottom_edge = _iou_percent(qe_bottom, ce_bottom)
+
+        if score_top_edge is None and score_bottom_edge is None:
+            score_edge = None
+        elif score_top_edge is None:
+            score_edge = score_bottom_edge
+        elif score_bottom_edge is None:
+            score_edge = score_top_edge
+        else:
+            score_edge = (1.0 - bottom_weight) * score_top_edge + bottom_weight * score_bottom_edge
         if score_edge is not None:
             score = (1.0 - edge_weight) * score_fill + edge_weight * score_edge
 

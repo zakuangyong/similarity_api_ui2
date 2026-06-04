@@ -13,6 +13,7 @@ from typing import Any, Iterable
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 from tools import car_front_seg
@@ -24,7 +25,7 @@ from tools.cdse_similarity import (
     part_feature_weights_for,
 )
 from tools.contour_similarity import contour_score_and_vis
-from tools.cutout_by_sam import run_cutout_by_sam
+from tools.cutout_by_sam import SamModelSpec, load_sam_predictor, run_cutout_by_sam, run_sam_cutout_from_instances
 
 
 ROOT = Path(__file__).resolve().parent
@@ -167,18 +168,14 @@ def _run_yolo_part_export(
 
     for p in car_front_seg.iter_images(input_dir):
         rgb = car_front_seg.load_rgb_with_white_bg(p)
-        results = model.predict(rgb, conf=conf, iou=iou, imgsz=imgsz, verbose=False)
-        if not results:
-            continue
-        raw = car_front_seg.unwrap_instances(results[0])
-        processed = car_front_seg.postprocess_instances(
-            raw,
-            car_front_seg.RULES,
-            side_x_max=car_front_seg.SIDE_X_MAX,
-            img_w=int(rgb.shape[1]),
+        processed = car_front_seg.detect_processed_instances(
+            model=model,
+            rgb=rgb,
+            conf=conf,
+            iou=iou,
+            imgsz=imgsz,
+            allowed_parts=allowed_parts,
         )
-        if allowed_parts is not None:
-            processed = [x for x in processed if str(car_front_seg._inst_get(x, "name") or "") in allowed_parts]
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         if save_labels:
             preview = car_front_seg.render_annotated_preview(
@@ -202,21 +199,8 @@ def _run_part_segmentation(
     visual_label_edge: bool,
     allowed_parts: set[str],
 ) -> None:
-    carpart_weight = _config_path(config, "carpart_weight")
     front_weight = _config_path(config, "front_part_weight")
 
-    _run_yolo_part_export(
-        input_dir=stage_dir,
-        weight_path=carpart_weight,
-        label_dir=label_dir,
-        parts_dir=parts_dir,
-        save_labels=False,
-        conf=conf,
-        iou=iou,
-        imgsz=imgsz,
-        visual_label_edge=False,
-        allowed_parts=allowed_parts,
-    )
     _run_yolo_part_export(
         input_dir=stage_dir,
         weight_path=front_weight,
@@ -231,10 +215,67 @@ def _run_part_segmentation(
     )
 
 
-def _count_images(path: Path) -> int:
-    if not path.exists():
-        return 0
-    return sum(1 for p in path.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
+def _run_part_segmentation_and_sam_cutout(
+    *,
+    stage_dir: Path,
+    label_dir: Path,
+    parts_dir: Path,
+    cutout_dir: Path,
+    config: dict[str, Any],
+    conf: float,
+    iou: float,
+    imgsz: int,
+    visual_label_edge: bool,
+    allowed_parts: set[str],
+    sam_checkpoint: Path,
+    sam_type: str,
+    device: str | None,
+) -> None:
+    front_weight = _config_path(config, "front_part_weight")
+    if not sam_checkpoint.is_file():
+        raise FileNotFoundError(str(sam_checkpoint))
+
+    label_dir.mkdir(parents=True, exist_ok=True)
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    cutout_dir.mkdir(parents=True, exist_ok=True)
+
+    model = YOLO(str(front_weight))
+    resolved_device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
+    sam_predictor = load_sam_predictor(
+        SamModelSpec(checkpoint=sam_checkpoint, model_type=sam_type, device=resolved_device)
+    )
+
+    for p in car_front_seg.iter_images(stage_dir):
+        rgb = car_front_seg.load_rgb_with_white_bg(p)
+        processed = car_front_seg.detect_processed_instances(
+            model=model,
+            rgb=rgb,
+            conf=conf,
+            iou=iou,
+            imgsz=imgsz,
+            allowed_parts=allowed_parts,
+        )
+        if not processed:
+            continue
+
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        preview = car_front_seg.render_annotated_preview(
+            bgr.copy(),
+            processed,
+            visual_label_edge=visual_label_edge,
+        )
+        car_front_seg._imwrite_cn(label_dir / p.name, preview)
+        car_front_seg.export_rgba_crops(bgr, processed, parts_dir / p.stem, p.stem)
+        run_sam_cutout_from_instances(
+            rgb=rgb,
+            bgr=bgr,
+            instances=processed,
+            output_dir=cutout_dir,
+            stem=p.stem,
+            sam_predictor=sam_predictor,
+            box_margin_ratio=0.03,
+            keep_largest_component=True,
+        )
 
 
 def _imread_cn(path: Path) -> np.ndarray | None:
@@ -614,7 +655,23 @@ def run_pipeline(
     ignored = _parse_csv(ignore_parts)
     allowed_parts = set(parts_used)
 
-    if not skip_seg:
+    if not skip_seg and not skip_cutout:
+        _run_part_segmentation_and_sam_cutout(
+            stage_dir=items[0].staged_path.parent,
+            label_dir=label_dir,
+            parts_dir=parts_dir,
+            cutout_dir=cutout_dir,
+            config=config,
+            conf=conf,
+            iou=iou,
+            imgsz=imgsz,
+            visual_label_edge=visual_label_edge,
+            allowed_parts=allowed_parts,
+            sam_checkpoint=_resolve_path("models/sam/sam_vit_h.pth"),
+            sam_type="vit_h",
+            device=("cuda:0" if device == "cuda" else "cpu") if device else None,
+        )
+    elif not skip_seg:
         _run_part_segmentation(
             stage_dir=items[0].staged_path.parent,
             label_dir=label_dir,
@@ -627,9 +684,7 @@ def run_pipeline(
             allowed_parts=allowed_parts,
         )
 
-    if not skip_cutout:
-        if _count_images(parts_dir) <= 0:
-            raise RuntimeError(f"未产生部件截图，无法进入 SAM 主体识别: {parts_dir}")
+    if skip_seg and not skip_cutout:
         run_cutout_by_sam(
             stage_dir=items[0].staged_path.parent,
             output_dir=cutout_dir,
@@ -644,7 +699,7 @@ def run_pipeline(
             box_margin_ratio=0.03,
             keep_largest_component=True,
         )
-    else:
+    elif skip_cutout:
         cutout_dir = parts_dir
 
     feature_names = _feature_list(config, features)

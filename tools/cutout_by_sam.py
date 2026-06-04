@@ -13,9 +13,6 @@ from ultralytics import YOLO
 from tools import car_front_seg
 
 
-CLASS_NAME_REMAP: dict[str, str] = {}
-
-
 @dataclass(frozen=True)
 class SamModelSpec:
     checkpoint: Path
@@ -36,6 +33,19 @@ def _expand_box(box: np.ndarray, ratio: float, width: int, height: int) -> np.nd
     margin_y = (y2 - y1) * ratio
     return _clip_box_to_image(
         np.array([x1 - margin_x, y1 - margin_y, x2 + margin_x, y2 + margin_y]),
+        width,
+        height,
+    )
+
+
+def _shrink_box(box: np.ndarray, ratio: float, width: int, height: int) -> np.ndarray:
+    x1, y1, x2, y2 = box.astype(np.float32)
+    margin_x = max(0.0, (x2 - x1) * ratio)
+    margin_y = max(0.0, (y2 - y1) * ratio)
+    if x1 + margin_x >= x2 - margin_x or y1 + margin_y >= y2 - margin_y:
+        return _clip_box_to_image(box, width, height)
+    return _clip_box_to_image(
+        np.array([x1 + margin_x, y1 + margin_y, x2 - margin_x, y2 - margin_y]),
         width,
         height,
     )
@@ -100,16 +110,18 @@ def _clean_grille_mask(
 ) -> np.ndarray:
     height, width = image_shape
     yolo_mask01 = _resize_mask01(yolo_mask01, width, height)
-    box = _clip_box_to_image(yolo_box, width, height)
+    box = _shrink_box(yolo_box, 0.02, width, height)
 
-    base = (yolo_mask01 >= 0.5) if yolo_mask01 is not None else sam_mask
-    base = _mask_inside_box(base, box)
     sam_limited = _mask_inside_box(sam_mask, box)
-    base = np.logical_or(base, sam_limited)
+    if yolo_mask01 is not None:
+        yolo_limited = _mask_inside_box(yolo_mask01 >= 0.5, box)
+        base = np.logical_and(sam_limited, yolo_limited)
+    else:
+        base = sam_limited
 
-    kernel = np.ones((5, 5), np.uint8)
-    m = cv2.morphologyEx(base.astype(np.uint8), cv2.MORPH_CLOSE, kernel, iterations=2)
-    m = cv2.dilate(m, np.ones((3, 3), np.uint8), iterations=1)
+    kernel = np.ones((3, 3), np.uint8)
+    m = cv2.morphologyEx(base.astype(np.uint8), cv2.MORPH_CLOSE, kernel, iterations=1)
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel, iterations=1)
     m = _mask_inside_box(m.astype(bool), box)
     m = _fill_largest_external_contour(m)
     m = _mask_inside_box(m, box)
@@ -167,28 +179,86 @@ def _clean_mask(
     return cleaned.astype(bool)
 
 
-def _load_sam_predictor(spec: SamModelSpec) -> SamPredictor:
+def load_sam_predictor(spec: SamModelSpec) -> SamPredictor:
     sam = sam_model_registry[spec.model_type](checkpoint=str(spec.checkpoint))
     sam.to(device=spec.device)
     return SamPredictor(sam)
 
 
-def _run_yolo_instances(
+def run_sam_cutout_from_instances(
     *,
-    model: YOLO,
     rgb: np.ndarray,
-    conf: float,
-    iou: float,
-    imgsz: int,
-) -> list[dict[str, Any]]:
-    results = model.predict(rgb, conf=conf, iou=iou, imgsz=imgsz, verbose=False)
-    if not results:
-        return []
-    raw = car_front_seg.unwrap_instances(results[0])
-    for inst in raw:
-        name = str(inst.get("name") or "")
-        inst["name"] = CLASS_NAME_REMAP.get(name, name)
-    return raw
+    bgr: np.ndarray,
+    instances: list[dict[str, Any]],
+    output_dir: Path,
+    stem: str,
+    sam_predictor: SamPredictor,
+    box_margin_ratio: float = 0.03,
+    keep_largest_component: bool = True,
+) -> None:
+    if not instances:
+        return
+
+    sam_predictor.set_image(rgb)
+
+    xyxy: list[list[float]] = []
+    boxed_instances: list[dict[str, Any]] = []
+    for inst in instances:
+        box = car_front_seg._inst_get(inst, "box_xyxy")
+        if box is None or len(box) != 4:
+            continue
+        xyxy.append([float(v) for v in box])
+        boxed_instances.append(inst)
+    if not xyxy:
+        return
+
+    boxes_torch = torch.as_tensor(xyxy, dtype=torch.float32, device=sam_predictor.device)
+    transformed = sam_predictor.transform.apply_boxes_torch(boxes_torch, rgb.shape[:2])
+    masks, _, _ = sam_predictor.predict_torch(
+        point_coords=None,
+        point_labels=None,
+        boxes=transformed,
+        multimask_output=False,
+    )
+    sam_masks = masks[:, 0].detach().cpu().numpy().astype(bool)
+
+    refined: list[dict[str, Any]] = []
+    for inst, sam_mask in zip(boxed_instances, sam_masks):
+        box = car_front_seg._inst_get(inst, "box_xyxy")
+        if box is None or len(box) != 4:
+            continue
+
+        yolo_mask01 = car_front_seg._as_mask01(car_front_seg._inst_get(inst, "mask01"))
+        name = str(car_front_seg._inst_get(inst, "name") or "")
+        if name == "grille":
+            cleaned = _clean_grille_mask(
+                sam_mask=sam_mask,
+                yolo_box=np.asarray(box, dtype=np.float32),
+                image_shape=rgb.shape[:2],
+                yolo_mask01=yolo_mask01,
+            )
+        elif name == "front_bumper":
+            cleaned = _clean_front_bumper_mask(
+                sam_mask=sam_mask,
+                yolo_box=np.asarray(box, dtype=np.float32),
+                image_shape=rgb.shape[:2],
+                yolo_mask01=yolo_mask01,
+            )
+        else:
+            cleaned = _clean_mask(
+                sam_mask=sam_mask,
+                yolo_box=np.asarray(box, dtype=np.float32),
+                image_shape=rgb.shape[:2],
+                box_margin_ratio=box_margin_ratio,
+                keep_largest_component=keep_largest_component,
+                yolo_mask01=yolo_mask01,
+            )
+        inst2 = dict(inst)
+        inst2["mask01"] = cleaned.astype(np.float32)
+        refined.append(inst2)
+
+    if refined:
+        car_front_seg.export_rgba_crops(bgr, refined, output_dir / stem, stem)
 
 
 def run_cutout_by_sam(
@@ -208,103 +278,38 @@ def run_cutout_by_sam(
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    carpart_weight = Path(str(config.get("models", {}).get("carpart_weight") or ""))
     front_weight = Path(str(config.get("models", {}).get("front_part_weight") or ""))
-    if not carpart_weight.is_file():
-        raise FileNotFoundError(str(carpart_weight))
     if not front_weight.is_file():
         raise FileNotFoundError(str(front_weight))
     if not sam_checkpoint.is_file():
         raise FileNotFoundError(str(sam_checkpoint))
 
     resolved_device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
-    sam_predictor = _load_sam_predictor(
+    sam_predictor = load_sam_predictor(
         SamModelSpec(checkpoint=sam_checkpoint, model_type=sam_type, device=resolved_device)
     )
 
-    model_carpart = YOLO(str(carpart_weight))
     model_front = YOLO(str(front_weight))
 
     for p in car_front_seg.iter_images(stage_dir):
         rgb = car_front_seg.load_rgb_with_white_bg(p)
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
-        inst_car = _run_yolo_instances(model=model_carpart, rgb=rgb, conf=conf, iou=iou, imgsz=imgsz)
-        inst_front = _run_yolo_instances(model=model_front, rgb=rgb, conf=conf, iou=iou, imgsz=imgsz)
-        raw = [*inst_car, *inst_front]
-
-        processed = car_front_seg.postprocess_instances(
-            raw,
-            car_front_seg.RULES,
-            side_x_max=car_front_seg.SIDE_X_MAX,
-            img_w=int(rgb.shape[1]),
+        processed = car_front_seg.detect_processed_instances(
+            model=model_front,
+            rgb=rgb,
+            conf=conf,
+            iou=iou,
+            imgsz=imgsz,
+            allowed_parts=allowed_parts,
         )
-
-        processed = [x for x in processed if str(car_front_seg._inst_get(x, "name") or "") in allowed_parts]
-        if not processed:
-            continue
-
-        sam_predictor.set_image(rgb)
-
-        xyxy: list[list[float]] = []
-        for inst in processed:
-            box = car_front_seg._inst_get(inst, "box_xyxy")
-            if box is None or len(box) != 4:
-                continue
-            xyxy.append([float(v) for v in box])
-        if not xyxy:
-            continue
-
-        boxes_torch = torch.as_tensor(xyxy, dtype=torch.float32, device=sam_predictor.device)
-        transformed = sam_predictor.transform.apply_boxes_torch(boxes_torch, rgb.shape[:2])
-        masks, _, _ = sam_predictor.predict_torch(
-            point_coords=None,
-            point_labels=None,
-            boxes=transformed,
-            multimask_output=False,
+        run_sam_cutout_from_instances(
+            rgb=rgb,
+            bgr=bgr,
+            instances=processed,
+            output_dir=output_dir,
+            stem=p.stem,
+            sam_predictor=sam_predictor,
+            box_margin_ratio=box_margin_ratio,
+            keep_largest_component=keep_largest_component,
         )
-        sam_masks = masks[:, 0].detach().cpu().numpy().astype(bool)
-
-        refined: list[dict[str, Any]] = []
-        j = 0
-        for inst in processed:
-            box = car_front_seg._inst_get(inst, "box_xyxy")
-            if box is None or len(box) != 4:
-                continue
-            if j >= len(sam_masks):
-                break
-
-            yolo_mask01 = car_front_seg._as_mask01(car_front_seg._inst_get(inst, "mask01"))
-            name = str(car_front_seg._inst_get(inst, "name") or "")
-            if name == "grille":
-                cleaned = _clean_grille_mask(
-                    sam_mask=sam_masks[j],
-                    yolo_box=np.asarray(box, dtype=np.float32),
-                    image_shape=rgb.shape[:2],
-                    yolo_mask01=yolo_mask01,
-                )
-            elif name == "front_bumper":
-                cleaned = _clean_front_bumper_mask(
-                    sam_mask=sam_masks[j],
-                    yolo_box=np.asarray(box, dtype=np.float32),
-                    image_shape=rgb.shape[:2],
-                    yolo_mask01=yolo_mask01,
-                )
-            else:
-                cleaned = _clean_mask(
-                    sam_mask=sam_masks[j],
-                    yolo_box=np.asarray(box, dtype=np.float32),
-                    image_shape=rgb.shape[:2],
-                    box_margin_ratio=box_margin_ratio,
-                    keep_largest_component=keep_largest_component,
-                    yolo_mask01=yolo_mask01,
-                )
-            j += 1
-            inst2 = dict(inst)
-            inst2["mask01"] = cleaned.astype(np.float32)
-            refined.append(inst2)
-
-        if not refined:
-            continue
-
-        car_front_seg.export_rgba_crops(bgr, refined, output_dir / p.stem, p.stem)
