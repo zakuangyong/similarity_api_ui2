@@ -59,6 +59,13 @@ def _mask_inside_box(mask: np.ndarray, box: np.ndarray) -> np.ndarray:
     return limited
 
 
+def _mask_bbox_width(mask: np.ndarray) -> int:
+    ys, xs = np.where(mask > 0)
+    if len(xs) == 0 or len(ys) == 0:
+        return 0
+    return int(xs.max() - xs.min() + 1)
+
+
 def _largest_component(mask: np.ndarray) -> np.ndarray:
     labels_count, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
     if labels_count <= 1:
@@ -115,7 +122,14 @@ def _clean_grille_mask(
     sam_limited = _mask_inside_box(sam_mask, box)
     if yolo_mask01 is not None:
         yolo_limited = _mask_inside_box(yolo_mask01 >= 0.5, box)
-        base = np.logical_and(sam_limited, yolo_limited)
+        intersect = np.logical_and(sam_limited, yolo_limited)
+        yolo_area = int(np.sum(yolo_limited))
+        intersect_area = int(np.sum(intersect))
+        yolo_width = _mask_bbox_width(yolo_limited)
+        intersect_width = _mask_bbox_width(intersect)
+        area_ok = yolo_area <= 0 or intersect_area >= int(yolo_area * 0.65)
+        width_ok = yolo_width <= 0 or intersect_width >= int(yolo_width * 0.75)
+        base = intersect if area_ok and width_ok else yolo_limited
     else:
         base = sam_limited
 
@@ -123,8 +137,13 @@ def _clean_grille_mask(
     m = cv2.morphologyEx(base.astype(np.uint8), cv2.MORPH_CLOSE, kernel, iterations=1)
     m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel, iterations=1)
     m = _mask_inside_box(m.astype(bool), box)
-    m = _fill_largest_external_contour(m)
+    m = _fill_mask_holes(m)
     m = _mask_inside_box(m, box)
+    if yolo_mask01 is not None:
+        yolo_width = _mask_bbox_width(yolo_limited)
+        final_width = _mask_bbox_width(m)
+        if yolo_width > 0 and final_width < int(yolo_width * 0.75):
+            m = yolo_limited
     return m.astype(bool)
 
 

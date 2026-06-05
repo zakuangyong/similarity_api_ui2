@@ -237,6 +237,7 @@ def _mask_to_rgba_crop(
     mask01: np.ndarray,
     *,
     fill_external_contour: bool = False,
+    keep_largest_component: bool = True,
 ) -> Optional[np.ndarray]:
     h, w = img_bgr.shape[:2]
     if mask01.ndim != 2:
@@ -260,7 +261,7 @@ def _mask_to_rgba_crop(
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
         )
         n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(crop_fg, connectivity=8)
-        if n_labels > 1:
+        if keep_largest_component and n_labels > 1:
             largest_idx = int(1 + np.argmax(stats[1:, cv2.CC_STAT_AREA]))
             crop_fg = (labels == largest_idx).astype(np.uint8)
 
@@ -556,7 +557,12 @@ def export_rgba_crops(img_bgr: np.ndarray, instances: Iterable, out_dir: Union[s
         mask01 = _as_mask01(_inst_get(inst, "mask01"))
         if mask01 is None:
             continue
-        rgba = _mask_to_rgba_crop(img_bgr, mask01, fill_external_contour=(name == "front_bumper"))
+        rgba = _mask_to_rgba_crop(
+            img_bgr,
+            mask01,
+            fill_external_contour=(name == "front_bumper"),
+            keep_largest_component=(name != "grille"),
+        )
         if rgba is None:
             continue
 

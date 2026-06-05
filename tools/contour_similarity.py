@@ -154,12 +154,12 @@ def contour_score_and_vis(
 
     gamma = float(cfg.get("calibration_gamma", 1.0))
     if gamma > 0 and abs(gamma - 1.0) > 1e-6:
-        capped = max(0.0, min(99.0, float(score)))
-        score = 99.0 * ((capped / 99.0) ** gamma)
+        capped = max(0.0, min(100.0, float(score)))
+        score = 100.0 * ((capped / 100.0) ** gamma)
 
     vis = np.zeros((q.shape[0], q.shape[1], 3), dtype=np.uint8)
     vis[q_bool] = [0, 0, 255]
     vis[c_aligned] = [0, 255, 0]
     overlap = np.logical_and(q_bool, c_aligned)
     vis[overlap] = [0, 255, 255]
-    return round(max(0.0, min(99.0, score)), 1), vis, q_bool, c_aligned
+    return round(max(0.0, min(100.0, score)), 1), vis, q_bool, c_aligned
