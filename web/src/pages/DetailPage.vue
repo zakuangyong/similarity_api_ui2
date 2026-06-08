@@ -125,7 +125,7 @@ function cropClass(partName: string) {
           <div>
             <div class="label topk-label">返回结果Top-N</div>
           </div>
-          <div class="number-like">20</div>
+          <div class="number-like">10</div>
         </div>
 
         <button class="primary" type="button">开始比对</button>
