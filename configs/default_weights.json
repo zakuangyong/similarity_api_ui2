@@ -1,7 +1,6 @@
 {
   "models": {
     "front_part_weight": "models/yolo-seg/yolo11m-seg-front-6label-2000.pt",
-    "contour_weight": "models/yolov8n-seg.pt",
     "birefnet_model": "models/BiRefNet",
     "cdse_model_dir": "models",
     "clip_dir": "models/clip-vit-large-patch14",
@@ -20,6 +19,8 @@
   "contour": {
     "keep_aspect": true,
     "align": "centroid",
+    "birefnet_resolution": 1024,
+    "birefnet_alpha_threshold": 0.13,
     "edge_weight": 0.7,
     "edge_thickness": 8,
     "bottom_edge_thickness": 12,

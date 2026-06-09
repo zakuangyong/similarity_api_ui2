@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -118,6 +119,62 @@ def _predict_alpha(
     return alpha
 
 
+@dataclass
+class BiRefNetSegmenter:
+    model: object
+    transform_image: transforms.Compose
+    device: str
+    use_fp16: bool
+
+    def predict_alpha(self, image_rgb: Image.Image, alpha_threshold: float = 0.13) -> Image.Image:
+        return _predict_alpha(
+            model=self.model,
+            transform_image=self.transform_image,
+            image_rgb=image_rgb.convert("RGB"),
+            device=self.device,
+            use_fp16=self.use_fp16,
+            alpha_threshold=alpha_threshold,
+        )
+
+    def cutout(self, image: Image.Image, alpha_threshold: float = 0.13) -> Image.Image:
+        rgba = image.convert("RGBA")
+        alpha = self.predict_alpha(rgba.convert("RGB"), alpha_threshold=alpha_threshold)
+        rgba.putalpha(alpha)
+        arr = np.array(rgba, dtype=np.uint8)
+        transparent = arr[:, :, 3] == 0
+        if np.any(transparent):
+            arr[transparent, 0:3] = 0
+        return Image.fromarray(arr, mode="RGBA")
+
+
+def load_birefnet_segmenter(
+    model_name: str | Path = "./models/BiRefNet",
+    device: str = "auto",
+    resolution: int = 1024,
+    no_fp16: bool = False,
+) -> BiRefNetSegmenter:
+    torch.set_float32_matmul_precision("high")
+    real_device = _resolve_device(device)
+    use_fp16 = real_device == "cuda" and not no_fp16
+    model_source = _resolve_model_source(model_name)
+    model = AutoModelForImageSegmentation.from_pretrained(
+        model_source,
+        trust_remote_code=True,
+    )
+    model.to(real_device)
+    model.eval()
+    if use_fp16:
+        model.half()
+    else:
+        model.float()
+    return BiRefNetSegmenter(
+        model=model,
+        transform_image=_build_transform(resolution),
+        device=real_device,
+        use_fp16=use_fp16,
+    )
+
+
 def _build_output_path(
     image_path: Path,
     base_input: Path,
@@ -146,23 +203,12 @@ def run_cutout(
     if not images:
         raise RuntimeError(f"未找到可处理图片: {input_path}")
 
-    torch.set_float32_matmul_precision("high")
-    real_device = _resolve_device(device)
-    use_fp16 = real_device == "cuda" and not no_fp16
-    model_source = _resolve_model_source(model_name)
-
-    model = AutoModelForImageSegmentation.from_pretrained(
-        model_source,
-        trust_remote_code=True,
+    segmenter = load_birefnet_segmenter(
+        model_name=model_name,
+        device=device,
+        resolution=resolution,
+        no_fp16=no_fp16,
     )
-    model.to(real_device)
-    model.eval()
-    if use_fp16:
-        model.half()
-    else:
-        model.float()
-
-    transform_image = _build_transform(resolution)
     input_is_dir = input_path.is_dir()
     ok = 0
     skipped = 0
@@ -170,24 +216,8 @@ def run_cutout(
 
     for image_path in tqdm(images, desc="BiRefNet 去背景"):
         try:
-            rgba = Image.open(image_path).convert("RGBA")
-            rgb = rgba.convert("RGB")
-            alpha = _predict_alpha(
-                model=model,
-                transform_image=transform_image,
-                image_rgb=rgb,
-                device=real_device,
-                use_fp16=use_fp16,
-                alpha_threshold=alpha_threshold,
-            )
-            cutout = rgba.copy()
-            cutout.putalpha(alpha)
-            # 清空透明区域的 RGB，避免下游忽略 alpha 时背景“回显”。
-            arr = np.array(cutout, dtype=np.uint8)
-            transparent = arr[:, :, 3] == 0
-            if np.any(transparent):
-                arr[transparent, 0:3] = 0
-                cutout = Image.fromarray(arr, mode="RGBA")
+            with Image.open(image_path) as image:
+                cutout = segmenter.cutout(image, alpha_threshold=alpha_threshold)
 
             out_path = _build_output_path(
                 image_path=image_path,

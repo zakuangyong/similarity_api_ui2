@@ -52,7 +52,7 @@ CPU 环境下 BiRefNet 会明显偏慢；调试页面流程时可以勾选“跳
 - `models/BiRefNet/`: 部件主体识别。
 - `models/dino/`: DINOv2 本地仓库和权重。
 - `models/clip-vit-large-patch14/`: CLIP 最小可运行本地文件。
-- `models/yolov8n-seg.pt`: 整车轮廓分割。
+- `models/BiRefNet/`: 普通背景图片的整车背景去除与轮廓 Mask 提取。
 
 ## Docker 构建（避免 segment-anything 下载超时）
 

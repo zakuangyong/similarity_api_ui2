@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import gc
 import json
 import math
 from pathlib import Path
@@ -12,7 +13,8 @@ from typing import Any
 
 import cv2
 import numpy as np
-from ultralytics import YOLO
+import torch
+from PIL import Image
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,11 +27,10 @@ from similarity_pipeline import (  # noqa: E402
     ROOT,
     _alpha_mask_from_image,
     _config_path,
-    _imread_cn,
-    _largest_car_mask,
     _load_config,
     _safe_name,
 )
+from tools.cutout_by_birefnet import BiRefNetSegmenter, load_birefnet_segmenter  # noqa: E402
 from tools.contour_similarity import (  # noqa: E402
     _bottom_region_mask,
     _crop_mask,
@@ -93,24 +94,37 @@ def _extract_masks(
 ) -> tuple[dict[str, np.ndarray], list[dict[str, str]]]:
     masks: dict[str, np.ndarray] = {}
     failures: list[dict[str, str]] = []
-    model: YOLO | None = None
+    segmenter: BiRefNetSegmenter | None = None
+    contour_cfg = config.get("contour") or {}
+    resolution = int(contour_cfg.get("birefnet_resolution", 1024))
+    alpha_threshold = float(contour_cfg.get("birefnet_alpha_threshold", 0.13))
     for index, image in enumerate(images, start=1):
         image_id = ids[image]
         mask = _alpha_mask_from_image(image)
         source = "alpha"
         if mask is None:
-            source = "yolo"
-            img = _imread_cn(image)
-            if img is not None:
-                if model is None:
-                    model = YOLO(str(_config_path(config, "contour_weight")))
-                mask = _largest_car_mask(model, img)
+            source = "birefnet"
+            if segmenter is None:
+                segmenter = load_birefnet_segmenter(
+                    model_name=_config_path(config, "birefnet_model"),
+                    device="auto",
+                    resolution=resolution,
+                )
+            with Image.open(image) as pil_image:
+                alpha = segmenter.predict_alpha(pil_image.convert("RGB"), alpha_threshold=alpha_threshold)
+            alpha_array = np.asarray(alpha, dtype=np.uint8)
+            mask = alpha_array > 0 if np.any(alpha_array > 0) else None
         if mask is None:
             failures.append({"image_id": image_id, "path": str(image), "error": "mask missing"})
             print(f"[mask {index}/{len(images)}] failed {image_id}", file=sys.stderr)
             continue
         masks[image_id] = mask.astype(bool)
         print(f"[mask {index}/{len(images)}] ok {image_id} source={source}")
+    if segmenter is not None:
+        del segmenter
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return masks, failures
 
 

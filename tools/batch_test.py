@@ -226,7 +226,13 @@ def _run_atomic_steps(
 
     contour_count = 0
     if args.contour_only:
-        contour = _run_contour_compare(items=items, query_item=query_item, output_dir=run_root, config=config)
+        contour = _run_contour_compare(
+            items=items,
+            query_item=query_item,
+            output_dir=run_root,
+            config=config,
+            device=args.device,
+        )
         contour_count = sum(1 for x in contour.values() if x.get("status") == "ok")
         steps["contour"] = {
             "items": contour,
@@ -376,7 +382,13 @@ def _run_cached_pairwise_query(
     parts_used = _parse_csv(args.parts) or list(config.get("parts") or [])
     ignored = _parse_csv(args.ignore_parts)
     feature_names = _feature_list(config, args.features)
-    contour = _run_contour_compare(items=compare_items, query_item=query_item, output_dir=run_root, config=config)
+    contour = _run_contour_compare(
+        items=compare_items,
+        query_item=query_item,
+        output_dir=run_root,
+        config=config,
+        device=args.device,
+    )
     results = _compare_parts(
         cutout_dir=Path(str(precompute["img_cutout"])),
         items=compare_items,

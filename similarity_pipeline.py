@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime as dt
+import gc
 import json
 import math
 import os
@@ -14,9 +15,11 @@ from typing import Any, Iterable
 import cv2
 import numpy as np
 import torch
+from PIL import Image
 from ultralytics import YOLO
 
 from tools import car_front_seg
+from tools.cutout_by_birefnet import BiRefNetSegmenter, load_birefnet_segmenter
 from tools.cdse_similarity import (
     CdseSimilarityEngine,
     FeatureName,
@@ -293,7 +296,9 @@ def _alpha_mask_from_image(path: Path) -> np.ndarray | None:
     if img is None or img.ndim != 3 or img.shape[2] < 4:
         return None
     alpha = img[:, :, 3]
-    if not np.any(alpha > 0):
+    # An opaque RGBA image is still a normal-background image. Only use alpha
+    # directly when the file actually contains transparent background pixels.
+    if not np.any(alpha < 250) or not np.any(alpha > 0):
         return None
     return alpha > 0
 
@@ -312,25 +317,21 @@ def _contour_preview(mask: np.ndarray) -> np.ndarray:
     return preview
 
 
-def _largest_car_mask(model: YOLO, image_bgr: np.ndarray) -> np.ndarray | None:
-    def pick(results: list[Any] | None) -> np.ndarray | None:
-        if not results or results[0].masks is None or len(results[0].boxes) == 0:
-            return None
-        masks = results[0].masks.data.detach().cpu().numpy()
-        boxes = results[0].boxes.xyxy.detach().cpu().numpy()
-        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-        idx = int(np.argmax(areas))
-        mask = masks[idx]
-        h, w = image_bgr.shape[:2]
-        if mask.shape[:2] != (h, w):
-            mask = cv2.resize(mask.astype(np.float32), (w, h), interpolation=cv2.INTER_NEAREST)
-        return mask
-
-    results = model.predict(image_bgr, conf=0.2, verbose=False)
-    mask = pick(results)
-    if mask is None:
+def _birefnet_cutout(
+    *,
+    segmenter: BiRefNetSegmenter,
+    image_path: Path,
+    output_path: Path,
+    alpha_threshold: float,
+) -> np.ndarray | None:
+    with Image.open(image_path) as image:
+        cutout = segmenter.cutout(image, alpha_threshold=alpha_threshold)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cutout.save(output_path)
+    alpha = np.asarray(cutout.getchannel("A"), dtype=np.uint8)
+    if not np.any(alpha > 0):
         return None
-    return mask > 0.5
+    return alpha > 0
 
 
 def _run_contour_compare(
@@ -339,19 +340,36 @@ def _run_contour_compare(
     query_item: ImageItem,
     output_dir: Path,
     config: dict[str, Any],
+    device: str | None,
 ) -> dict[str, dict[str, Any]]:
-    model: YOLO | None = None
+    segmenter: BiRefNetSegmenter | None = None
     contour_cfg = config.get("contour") or {}
+    birefnet_resolution = int(contour_cfg.get("birefnet_resolution", 1024))
+    birefnet_alpha_threshold = float(contour_cfg.get("birefnet_alpha_threshold", 0.13))
+    cutout_dir = output_dir / "vehicle_cutout"
     masks: dict[str, np.ndarray | None] = {}
     for item in items:
         mask = _alpha_mask_from_image(item.staged_path)
         if mask is None:
-            img = _imread_cn(item.staged_path)
-            if img is not None:
-                if model is None:
-                    model = YOLO(str(_config_path(config, "contour_weight")))
-                mask = _largest_car_mask(model, img)
+            if segmenter is None:
+                resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+                segmenter = load_birefnet_segmenter(
+                    model_name=_config_path(config, "birefnet_model"),
+                    device=resolved_device,
+                    resolution=birefnet_resolution,
+                )
+            mask = _birefnet_cutout(
+                segmenter=segmenter,
+                image_path=item.staged_path,
+                output_path=cutout_dir / f"{item.item_id}.png",
+                alpha_threshold=birefnet_alpha_threshold,
+            )
         masks[item.item_id] = mask
+    if segmenter is not None:
+        del segmenter
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     out: dict[str, dict[str, Any]] = {}
     contour_dir = output_dir / "contour"
@@ -703,7 +721,13 @@ def run_pipeline(
         cutout_dir = parts_dir
 
     feature_names = _feature_list(config, features)
-    contour = _run_contour_compare(items=items, query_item=query_item, output_dir=run_root, config=config)
+    contour = _run_contour_compare(
+        items=items,
+        query_item=query_item,
+        output_dir=run_root,
+        config=config,
+        device=device,
+    )
     results = _compare_parts(
         cutout_dir=cutout_dir,
         items=items,
@@ -723,6 +747,7 @@ def run_pipeline(
         "front_label": str(label_dir),
         "front_parts": str(parts_dir),
         "img_cutout": str(cutout_dir),
+        "vehicle_cutout": str(run_root / "vehicle_cutout"),
         "run_root": str(run_root),
     }
     report_paths = _write_reports(
