@@ -31,7 +31,11 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(raw || `HTTP ${res.status}`)
   }
-  return (await res.json()) as T
+  const payload = (await res.json()) as T & { detail?: unknown }
+  if (payload && typeof payload === 'object' && payload.detail) {
+    throw new Error(String(payload.detail))
+  }
+  return payload as T
 }
 
 export async function compare(input: { queryImage?: File; view: string; vehicleType: string; topk: number }): Promise<CompareResponse> {

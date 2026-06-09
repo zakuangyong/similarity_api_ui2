@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import shutil
 import tempfile
 from pathlib import Path
 import sys
+from typing import AsyncIterator
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .pipeline_api import (
@@ -79,11 +82,14 @@ def create_app() -> FastAPI:
             suffix = Path(query_image.filename or "query").suffix
             if not suffix:
                 suffix = ".jpg"
-            with tempfile.TemporaryDirectory() as td:
-                tmp = Path(td) / f"query{suffix}"
-                with tmp.open("wb") as f:
-                    shutil.copyfileobj(query_image.file, f)
-                out = run_compare(
+            temp_dir = Path(tempfile.mkdtemp(prefix="similarity_compare_"))
+            tmp = temp_dir / f"query{suffix}"
+            with tmp.open("wb") as f:
+                shutil.copyfileobj(query_image.file, f)
+
+            task = asyncio.create_task(
+                asyncio.to_thread(
+                    run_compare,
                     query_image_path=tmp,
                     view=view,
                     vehicle_type=vehicle_type,
@@ -91,7 +97,34 @@ def create_app() -> FastAPI:
                     img_root=settings.img_root,
                     result_root=settings.result_root,
                 )
-                return JSONResponse(out)
+            )
+            task.add_done_callback(lambda _: shutil.rmtree(temp_dir, ignore_errors=True))
+
+            async def stream_result() -> AsyncIterator[bytes]:
+                # Send a first byte immediately, then periodic JSON whitespace so
+                # upstream proxies do not treat a long GPU job as an idle origin.
+                yield b"\n"
+                while not task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=10.0)
+                    except asyncio.TimeoutError:
+                        yield b" \n"
+
+                try:
+                    out = await task
+                    yield json.dumps(out, ensure_ascii=False).encode("utf-8")
+                except Exception as e:
+                    payload = {"detail": f"compare failed: {e}"}
+                    yield json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+            return StreamingResponse(
+                stream_result(),
+                media_type="application/json",
+                headers={
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except RuntimeError as e:
