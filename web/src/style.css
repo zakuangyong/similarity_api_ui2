@@ -3,32 +3,63 @@
 @tailwind utilities;
 
 :root {
-  --bg: #06080b;
-  --panel: #242b33;
-  --panel-2: #1d232b;
-  --card: #11161d;
-  --card-2: #0a0f14;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.14);
-  --text: #eaf2ff;
-  --muted: #93a3b5;
-  --muted-2: #6a7a8c;
-  --accent: #2b93d6;
-  --accent-dark: #136aa4;
-  --good: #34d399;
-  --warn: #fbbf24;
-  --danger: #f87171;
-  --radius: 10px;
-  --shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
+  --app-bg: #0a0a0a;
+  --panel-bg: #22252a;
+  --panel-bg-dark: #16181b;
+  --panel-bg-light: #393e47;
+  --panel-border: #353a3f;
+  --panel-divider: #2a2e34;
+  --panel-title: #f3f4f6;
+  --panel-text: #e5e7eb;
+  --panel-text-muted: #9ca3af;
+  --panel-text-subtle: #6b7280;
+  --panel-placeholder: #4b5563;
+  --preview-bg: #0a0a0a;
+  --preview-border: #353a3f;
+  --preview-title: #f3f4f6;
+  --surface-card: rgba(217, 217, 217, 0.04);
+  --surface-card-hover: rgba(217, 217, 217, 0.06);
+  --surface-overlay: rgba(10, 10, 10, 0.55);
+  --border-light: rgba(217, 217, 217, 0.1);
+  --border-medium: rgba(217, 217, 217, 0.18);
+  --border-strong: rgba(255, 255, 255, 0.45);
+  --accent: #3f8fc7;
+  --accent-hover: #409eff;
+  --accent-text: #e5f0f8;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
   color-scheme: dark;
-  font-family: "Microsoft YaHei UI", "PingFang SC", "Source Han Sans SC", system-ui, sans-serif;
+  font-family:
+    Inter,
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+html,
+body,
+#app {
+  min-height: 100%;
+  height: 100%;
+  background: var(--app-bg);
+}
+
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(75, 80, 88, 0.72) rgba(255, 255, 255, 0.04);
 }
 
 html {
@@ -37,21 +68,42 @@ html {
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--app-bg);
+  color: var(--panel-text);
   min-width: 320px;
+  overflow: hidden;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+#app {
+  width: 100%;
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(12, 17, 23, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(154, 168, 184, 0.34);
+  background: rgba(75, 80, 88, 0.72);
   border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 80, 88, 0.92);
 }

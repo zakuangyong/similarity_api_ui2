@@ -4,6 +4,7 @@ import { ZoomIn, X } from 'lucide-vue-next'
 import { RouterLink, useRoute } from 'vue-router'
 import { getCandidateDetail } from '@/api/client'
 import type { CandidateDetailResponse, ScoreTag } from '@/api/types'
+import GenerateWorkspaceLayout from '@/components/Layout.vue'
 import { loadLastQueryName } from '@/state/runCache'
 
 const route = useRoute()
@@ -95,68 +96,93 @@ function cropClass(partName: string) {
   if (partName === '前保险杠') return 'tile-crop grille'
   return 'tile-crop glass'
 }
+
 </script>
 
 <template>
-  <main class="shell">
-    <section class="app-grid" aria-label="相似度查重工作台">
-      <aside class="panel sidebar">
-        <h1>相似度查重</h1>
+  <GenerateWorkspaceLayout panel-title="结果详情">
+    <template #panel>
+      <section class="detail-sidebar" aria-label="候选详情摘要">
+        <div class="detail-sidebar__stack">
+          <div class="detail-sidebar__section">
+            <p class="field-title">查询图片</p>
+            <article class="query-card detail-sidebar__image-card">
+              <img v-if="queryThumb" :src="queryThumb" alt="查询图片" />
+              <div v-else class="detail-sidebar__image-placeholder">暂无查询图片</div>
+              <div class="query-meta">
+                <div class="query-name">上传比对图片</div>
+                <div class="query-note" :title="queryName || data?.query.name">{{ queryName || data?.query.name || '未命名查询' }}</div>
+              </div>
+            </article>
+          </div>
 
-        <div>
-          <div class="field-title">上传待对比图片</div>
-          <div class="upload-box" tabindex="0" aria-label="上传待对比图片">
-            <div v-if="queryThumb" class="upload-preview">
-              <img :src="queryThumb" alt="上传图片缩略图" />
-              <div class="upload-filename">{{ queryName || '上传比对图片' }}</div>
-            </div>
-            <div v-else>
-              <div class="upload-icon"></div>
-              <div class="upload-text">上传</div>
+          <div class="detail-sidebar__section">
+            <p class="field-title">候选图片</p>
+            <article class="query-card detail-sidebar__image-card">
+              <img v-if="data?.candidate.image_url" :src="data.candidate.image_url" alt="候选图片" />
+              <div v-else class="detail-sidebar__image-placeholder">{{ loading ? '正在加载候选图片...' : '暂无候选图片' }}</div>
+              <div class="query-meta">
+                <div class="query-name">候选车型</div>
+                <div class="query-note" :title="data?.candidate.name">{{ data?.candidate.name || '等待加载' }}</div>
+              </div>
+            </article>
+          </div>
+
+          <div v-if="data" class="detail-sidebar__section">
+            <p class="field-title">评分摘要</p>
+            <div class="detail-sidebar__score-grid">
+              <article class="detail-sidebar__score-card">
+                <span class="detail-sidebar__score-label">总相似度</span>
+                <strong class="detail-sidebar__score-value">{{ data.summary.final_score.toFixed(1).replace(/\.0$/, '') }}</strong>
+                <span :class="tagClass(data.summary.tag)">{{ data.summary.tag }}</span>
+              </article>
+              <article class="detail-sidebar__mini-card">
+                <span class="detail-sidebar__score-label">轮廓分</span>
+                <strong class="detail-sidebar__mini-value">{{ data.contour.score.toFixed(1).replace(/\.0$/, '') }}</strong>
+              </article>
+              <article class="detail-sidebar__mini-card">
+                <span class="detail-sidebar__score-label">部件分</span>
+                <strong class="detail-sidebar__mini-value">{{ data.parts.score.toFixed(1).replace(/\.0$/, '') }}</strong>
+              </article>
             </div>
           </div>
+
+          <div v-if="errorMessage" class="error" role="status">{{ errorMessage }}</div>
         </div>
 
-        <div class="control">
-          <div class="select-like">车型选择 <span aria-hidden="true"></span></div>
+        <div class="panel-actions detail-sidebar__actions">
+          <RouterLink class="gallery-entry" :to="{ name: 'workbench', query: { restore: '1' } }" aria-label="返回概览">返回概览</RouterLink>
         </div>
+      </section>
+    </template>
 
-        <div class="topk-row">
-          <div>
-            <div class="label topk-label">返回结果Top-N</div>
-          </div>
-          <div class="number-like">10</div>
-        </div>
-
-        <button class="primary" type="button">开始比对</button>
-      </aside>
-
-      <section class="panel result-panel">
-        <div class="result-head">
-          <h2>分析结果</h2>
-        </div>
-        <div class="detail-stage">
+    <template #preview>
+      <section class="result-panel">
+        <div class="result-stage detail-stage">
           <div v-if="loading" class="loading-wrap" role="status" aria-live="polite">
             <div class="loading-card">
               <div class="loading-text">正在加载详情...</div>
             </div>
           </div>
-          <div v-else-if="errorMessage" class="loading-wrap" role="status">
-            <div class="loading-card">
-              <div class="loading-text">{{ errorMessage }}</div>
+          <div v-else-if="errorMessage" class="empty-wrap" role="status">
+            <div class="empty-card">
+              <div class="empty-title">详情加载失败</div>
+              <div class="empty-text">{{ errorMessage }}</div>
             </div>
           </div>
           <div v-else-if="data" class="detail-canvas">
-            <header class="topbar">
-              <h1>A车 vs B车 相似度分析详情</h1>
-              <RouterLink class="back" :to="{ name: 'workbench', query: { restore: '1' } }" aria-label="返回概览">返回概览</RouterLink>
-            </header>
+            <div class="detail-sticky-head">
+              <header class="topbar">
+                <h1>A车 vs B车 相似度分析详情</h1>
+                <RouterLink class="back" :to="{ name: 'workbench', query: { restore: '1' } }" aria-label="返回概览">返回概览</RouterLink>
+              </header>
 
-            <nav class="anchor-nav" aria-label="详情页快捷导航">
-              <a href="#overview">概览</a>
-              <a href="#contour">轮廓</a>
-              <a href="#evidence">部件详情</a>
-            </nav>
+              <nav class="anchor-nav" aria-label="详情页快捷导航">
+                <a href="#overview">概览</a>
+                <a href="#contour">轮廓</a>
+                <a href="#evidence">部件详情</a>
+              </nav>
+            </div>
 
             <section id="overview" class="panel summary" aria-label="相似度总结">
               <article class="score-card">
@@ -302,10 +328,15 @@ function cropClass(partName: string) {
               </div>
             </section>
           </div>
+          <div v-else class="empty-wrap" role="status">
+            <div class="empty-card">
+              <div class="empty-title">暂无详情数据</div>
+              <div class="empty-text">请从工作台的候选结果进入详情页查看分析内容。</div>
+            </div>
+          </div>
         </div>
       </section>
-    </section>
-
+    </template>
     <Teleport to="body">
       <div v-if="zoomOpen" class="zoom-overlay" role="dialog" aria-modal="true" @click.self="closeZoom">
         <button class="zoom-close" type="button" aria-label="关闭" @click="closeZoom">
@@ -314,7 +345,8 @@ function cropClass(partName: string) {
         <img class="zoom-image" :src="zoomUrl" :alt="zoomAlt || '预览图片'" />
       </div>
     </Teleport>
-  </main>
+  </GenerateWorkspaceLayout>
 </template>
 
+<style scoped src="../styles/workbench.css"></style>
 <style scoped src="../styles/detail.css"></style>

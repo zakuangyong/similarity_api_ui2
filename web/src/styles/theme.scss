@@ -1,0 +1,112 @@
+// Base Colors
+$white: #ffffff;
+$black: #000000;
+$color-blue: #4c6eff;
+
+// Brand Colors
+$primary-color: #409eff;
+
+// home
+$home-bg: #0a0a0a;
+$entry-title-color: #ffffff; //入口标题颜色
+$entry-label-color: #e5e7eb; //入口label颜色
+$entry-arrow-color: #9ca3af; //入口箭头颜色
+$inspiration-hover-bg: #16181b;
+$inspiration-title-color: #f3f4f6; //灵感标题颜色
+$inspiration-label-color: #9ca3af; //灵感label颜色
+
+$entry-list-gap: 24px;
+$inspiration-border-radius: 4px; // 右侧结果展示区边框圆角大小
+$inspiration-border-radius-big: 8px; // 右侧结果展示区边框圆角大小-大
+
+// 头部导航栏
+$header-bg: #22252a;
+$header-border-color: #353a3f;
+$header-left-text-color: #ffffff;
+$header-menu-text-color: #e5e7eb;
+$header-menu-active-bg: #3b4049;
+$header-menu-active-text-color: linear-gradient(
+	274.99deg,
+	#2699e9 12.53%,
+	#6fd9ff 97.99%
+);
+$header-menu-border-radius: 4px;
+
+// workspace 左侧面板
+$panel-bg: #22252a; // 左侧面板背景颜色
+$panel-bg-black: #101112; // 左侧面板背景颜色-黑
+$panel-bg-dark: #16181b; // 左侧面板内块的颜色
+$panel-bg-light: #393e47; // 左侧面板内块的颜色-亮
+$panel-divider-color: #2a2e34; // 左侧面板分隔线颜色
+$panel-border-color: #353a3f; //左侧面板边框颜色
+$panel-button-bg: #3f8fc7; // 左侧面板 开始生成 按钮背景颜色
+$panel-button-hover-bg: #409eff; // 左侧面板 开始生成 按钮悬停背景颜色
+$panel-button-text-color: #e5f0f8; // 左侧面板 开始生成 按钮文字颜色
+$panel-title-color: #f3f4f6; // 左侧面板最顶上标题颜色
+$panel-text-color: #e5e7eb; // 左侧面板文字颜色
+$panel-text-color-dark: #6b7280; // 左侧面板文字颜色（暗）
+$panel-text-color-light: #9ca3af;
+$panel-textarea-bg: #16181b; // 左侧面板 文本域背景颜色
+$panel-textarea-placeholder-color: #4b5563; // 左侧面板 文本域文字颜色
+$panel-border-radius: 4px; // 右侧结果展示区边框圆角大小
+$panel-border-radius-big: 8px; // 右侧结果展示区边框圆角大小-大
+
+// workspace 右侧结果展示区
+$preview-bg: #0a0a0a; // 右侧结果展示区背景颜色
+$preview-bg-light: #22252a; // 右侧结果展示区背景颜色-亮
+$preview-border-color: #353a3f; //右侧结果展示区边框颜色
+$preview-title-color: #f3f4f6; // 右侧结果展示区标题颜色
+$preview-text-color-dark: #4b5563; // 右侧结果展示区文字颜色
+$preview-text-color-light: #ffffff; // 右侧结果展示区文字颜色-亮
+$preview-border-radius: 4px; // 右侧结果展示区边框圆角大小
+$preview-border-radius-big: 8px; // 右侧结果展示区边框圆角大小-大
+
+// workspace 右侧历史记录
+$history-bg: #22252a; // 右侧历史记录背景颜色
+$history-bg-light: #393e47; // 右侧历史记录背景颜色-亮
+$history-border-color: #353a3f; //右侧历史记录边框颜色
+$history-title-color: #ffffff; // 右侧历史记录标题颜色
+
+$history-text-color: #e5e7eb; // 右侧历史记录文字颜色
+$history-text-color-light: #ffffff; // 右侧历史记录文字颜色-亮
+$history-text-color-dark: #9ca3af; // 右侧历史记录文字颜色-暗
+
+$history-border-radius: 4px; // 右侧历史记录边框圆角大小
+$history-border-radius-big: 8px; // 右侧历史记录边框圆角大小-大
+
+$history-nav-bg: #3f4248; // 右侧历史记录导航按钮背景颜色
+$history-nav-text-color: #ffffff; // 右侧历史记录导航按钮文字颜色
+$history-nav-border-color: #626a77; // 右侧历史记录导航按钮边框颜色
+$history-nav-hover-bg: rgba($black, 0.56); // 右侧历史记录导航按钮悬停背景颜色
+
+// Text Colors
+$text-100: #ffffff;
+$text-80: #e5e7eb;
+$text-60: rgba(229, 231, 235, 0.8);
+$text-40: #4b5563;
+$text-placeholder: #d9d9d9;
+$text-aside: #2c3e50;
+$text-link: #337ab7;
+$text-link-hover: rgb(32, 160, 255);
+
+// Border Colors
+$border-base: #353a3f;
+$border-avatar: #3f4144;
+$border-light: rgba(217, 217, 217, 0.3);
+$border-extra-light: rgba(217, 217, 217, 0.1);
+$border-action: rgba(217, 217, 217, 0.22);
+$border-medium: rgba(217, 217, 217, 0.18);
+$border-strong: rgba(255, 255, 255, 0.45);
+
+// Functional Backgrounds
+$bg-card: rgba(217, 217, 217, 0.04);
+$bg-card-hover: rgba(217, 217, 217, 0.06);
+$bg-overlay: rgba(0, 0, 0, 0.2);
+$bg-overlay-deep: rgba(10, 10, 10, 0.55);
+
+// Status Colors
+$status-error: #ef4444;
+$status-warning: #f59e0b;
+$status-success: #22c55e;
+$status-info: #94a3b8;
+$status-disabled: #d0d0d0;

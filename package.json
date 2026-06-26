@@ -1,0 +1,8 @@
+{
+	"dependencies": {
+		"element-plus": "^2.14.2"
+	},
+	"devDependencies": {
+		"sass-embedded": "^1.100.0"
+	}
+}
