@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import type { UploadProps, UploadRawFile, UploadUserFile } from 'element-plus'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { compare } from '@/api/client'
 import type { CandidateCard, CompareResponse } from '@/api/types'
+import GenerateWorkspaceLayout from '@/components/Layout.vue'
 import { loadLastCompare, saveLastCompare, saveLastQueryName } from '@/state/runCache'
 
 const viewOptions = [
@@ -17,11 +19,12 @@ const view = ref(viewOptions[0]!.value)
 const vehicleType = ref('轿车')
 const topk = ref(10)
 
-const fileInputEl = ref<HTMLInputElement | null>(null)
 const queryFile = ref<File | null>(null)
 const queryObjectUrl = ref<string | null>(null)
+const uploadFileList = ref<UploadUserFile[]>([])
 
 const route = useRoute()
+const router = useRouter()
 const run = ref<CompareResponse | null>(null)
 const results = computed<CandidateCard[]>(() => (run.value?.results ?? []).slice(0, 20))
 
@@ -40,22 +43,66 @@ const queryPreview = computed(() => {
   return run.value?.query_staged_path ?? ''
 })
 
-function openFilePicker() {
-  fileInputEl.value?.click()
+const resultSummary = computed(() => {
+  if (loading.value) return '正在执行相似度查重'
+  if (run.value) return `已返回 ${results.value.length} 个候选结果`
+  return '上传图片并设置参数后开始比对'
+})
+
+function clearQueryObjectUrl() {
+  if (queryObjectUrl.value) {
+    URL.revokeObjectURL(queryObjectUrl.value)
+    queryObjectUrl.value = null
+  }
 }
 
-function onFileChange(e: Event) {
-  const el = e.target as HTMLInputElement
-  const file = el.files?.[0]
-  if (!file) return
+function restoreQueryUploadList() {
+  uploadFileList.value =
+    queryFile.value && queryObjectUrl.value ? [{ name: queryFile.value.name, url: queryObjectUrl.value }] : []
+}
 
+function syncQueryFile(file: File) {
   queryFile.value = file
-  if (queryObjectUrl.value) URL.revokeObjectURL(queryObjectUrl.value)
-  queryObjectUrl.value = URL.createObjectURL(file)
+  clearQueryObjectUrl()
+  const nextObjectUrl = URL.createObjectURL(file)
+  queryObjectUrl.value = nextObjectUrl
+  uploadFileList.value = [{ name: file.name, url: nextObjectUrl }]
   saveLastQueryName(file.name.replace(/\.[^/.]+$/, ''))
   run.value = null
   progress.value = 0
-  el.value = ''
+}
+
+function handleSelectedQueryFile(rawFile: File) {
+  const isValidType = ['image/jpeg', 'image/png'].includes(rawFile.type)
+  if (!isValidType) {
+    restoreQueryUploadList()
+    errorMessage.value = '仅支持 JPG、JPEG、PNG 格式图片'
+    return
+  }
+
+  const isValidSize = rawFile.size / 1024 / 1024 <= 10
+  if (!isValidSize) {
+    restoreQueryUploadList()
+    errorMessage.value = '图片大小不能超过 10MB'
+    return
+  }
+
+  errorMessage.value = null
+  syncQueryFile(rawFile)
+}
+
+const handleQueryUploadChange: UploadProps['onChange'] = (uploadFile) => {
+  if (!uploadFile.raw) {
+    restoreQueryUploadList()
+    return
+  }
+  handleSelectedQueryFile(uploadFile.raw)
+}
+
+const handleUploadExceed: UploadProps['onExceed'] = (files) => {
+  const nextFile = files[0] as UploadRawFile | undefined
+  if (!nextFile) return
+  handleSelectedQueryFile(nextFile)
 }
 
 function stopProgress() {
@@ -109,7 +156,7 @@ async function startCompare() {
 
 onBeforeUnmount(() => {
   stopProgress()
-  if (queryObjectUrl.value) URL.revokeObjectURL(queryObjectUrl.value)
+  clearQueryObjectUrl()
 })
 
 onMounted(() => {
@@ -129,67 +176,87 @@ function scoreTagText(score: number) {
   if (score >= 72) return '中高相似'
   return '局部相似'
 }
+
+function goGallery() {
+  void router.push('/gallery')
+}
 </script>
 
 <template>
-  <main class="shell">
-    <section class="app-grid" id="workbenchGrid" aria-label="相似度查重工作台">
-      <aside class="panel sidebar">
-        <h1>相似度查重</h1>
+  <GenerateWorkspaceLayout panel-title="相似度查重">
+    <template #panel>
+      <el-form  label-position="left" label-width="210">
+        <el-form-item  label="视角选择" label-width="210">
+          <el-select v-model="view" placeholder="请选择视角" :disabled="loading">
+            <el-option v-for="opt in viewOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
 
-        <div class="select-row">
-          <label class="select-label" for="viewSelect">视角选择</label>
-          <select class="view-select" id="viewSelect" v-model="view" aria-label="视角选择">
-            <option v-for="opt in viewOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
-        </div>
+        <el-form-item label="车型选择">
+          <el-select v-model="vehicleType" placeholder="请选择车型" :disabled="loading">
+            <el-option v-for="opt in vehicleOptions" :key="opt" :label="opt" :value="opt" />
+          </el-select>
+        </el-form-item>
 
-        <div class="select-row">
-          <label class="select-label" for="vehicleSelect">车型选择</label>
-          <select class="vehicle-select" id="vehicleSelect" v-model="vehicleType" aria-label="车型选择">
-            <option v-for="opt in vehicleOptions" :key="opt" :value="opt">{{ opt }}</option>
-          </select>
-        </div>
+        <el-form-item label-position="top" required label="上传待对比图片">
+          <div class="upload-field">
 
-        <div>
-          <div class="field-title">上传待对比图片</div>
-          <div class="upload-box" role="button" tabindex="0" aria-label="上传待对比图片" @click="openFilePicker" @keydown.enter="openFilePicker">
-            <div v-if="queryObjectUrl" class="upload-preview">
-              <img :src="queryObjectUrl" alt="上传图片缩略图" />
-              <div class="upload-filename" :title="uploadedVehicleName">{{ uploadedVehicleName }}</div>
-            </div>
-            <div v-else>
-              <div class="upload-icon" aria-hidden="true">
-                <svg viewBox="0 0 64 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="3.5" y="3.5" width="57" height="41" rx="8" stroke="rgba(20,121,184,0.9)" stroke-width="5" />
-                  <circle cx="20" cy="18" r="5" fill="rgba(20,121,184,0.9)" />
-                  <path
-                    d="M11 38L25.5 25.5C27.1 24.1 29.5 24.2 31 25.8L37.5 33.3C38.8 34.8 41 35.1 42.7 34.1L53 28V41H11V38Z"
-                    fill="rgba(20,121,184,0.9)"
-                  />
-                </svg>
+            <el-upload
+              v-model:file-list="uploadFileList"
+              class="upload-box"
+              action="#"
+              :show-file-list="false"
+              :auto-upload="false"
+              :limit="1"
+              accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+              :disabled="loading"
+              :on-change="handleQueryUploadChange"
+              :on-exceed="handleUploadExceed"
+            >
+              <div v-if="queryObjectUrl" class="upload-preview">
+                <img :src="queryObjectUrl" alt="上传图片缩略图" />
               </div>
-              <div class="upload-text">上传</div>
-            </div>
+              <div v-else class="upload-empty">
+                <div class="upload-icon" aria-hidden="true">
+                  <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="12" y="12" width="40" height="40" rx="8" fill="rgba(34, 137, 255, 0.16)" />
+                    <path d="M24 40L32 32L37 37L44 30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M40 24H29C26.7909 24 25 25.7909 25 28V39" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                    <path d="M35 20H44V29" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="upload-text">上传</div>
+                <div class="upload-hint">支持 JPG、PNG 格式，最大文件大小为 10MB</div>
+              </div>
+            </el-upload>
           </div>
-          <input ref="fileInputEl" class="sr-only" type="file" accept="image/*" @change="onFileChange" />
-        </div>
+        </el-form-item>
 
-        <div class="topk-row">
-          <div>
-              <div class="label topk-label">返回结果Top-N</div>
+        <el-form-item label="返回结果Top-N">
+          <el-input-number v-model="topk" class="topk-input" :min="1" :max="20" :step="1" :controls="false" :disabled="loading" />
+        </el-form-item>
+        <el-form-item label-position="top">
+            <el-button class="gallery-entry" :disabled="loading" @click="goGallery">图库管理</el-button>
+            </el-form-item>
+        <el-form-item v-if="errorMessage" class="workbench-form__item workbench-form__item--error" label-width="0">
+          <div class="error" role="status">{{ errorMessage }}</div>
+        </el-form-item>
+
+        <el-form-item class="workbench-form__item workbench-form__actions-item" label-width="0">
+          <div class="panel-actions">
+            <el-button class="primary" type="primary" :disabled="loading" @click="startCompare">开始比对</el-button>
           </div>
-            <input v-model.number="topk" class="topk-input" type="number" inputmode="numeric" min="1" max="20" step="1" :disabled="loading" />
-        </div>
+        </el-form-item>
+      </el-form>
+    </template>
 
-        <button class="primary" type="button" :disabled="loading" @click="startCompare">开始比对</button>
-        <div v-if="errorMessage" class="error" role="status">{{ errorMessage }}</div>
-        <RouterLink class="gallery-entry" to="/gallery">图库管理</RouterLink>
-      </aside>
-
-      <section class="panel result-panel">
+    <template #preview>
+      <section class="result-panel">
         <div class="result-head">
-          <h2>分析结果</h2>
+          <div>
+            <h2>分析结果</h2>
+            <p class="result-meta">{{ resultSummary }}</p>
+          </div>
         </div>
         <div class="result-stage">
           <template v-if="run">
@@ -228,10 +295,18 @@ function scoreTagText(score: number) {
               </div>
             </div>
           </template>
+          <template v-else>
+            <div class="empty-wrap" role="status" aria-live="polite">
+              <div class="empty-card">
+                <div class="empty-title">等待开始比对</div>
+                <div class="empty-text">请先在左侧选择视角、车型并上传待比对图片，再点击“开始比对”。</div>
+              </div>
+            </div>
+          </template>
         </div>
       </section>
-    </section>
-  </main>
+    </template>
+  </GenerateWorkspaceLayout>
 </template>
 
 <style scoped src="../styles/workbench.css"></style>
