@@ -56,6 +56,11 @@ function clearQueryObjectUrl() {
   }
 }
 
+function restoreQueryUploadList() {
+  uploadFileList.value =
+    queryFile.value && queryObjectUrl.value ? [{ name: queryFile.value.name, url: queryObjectUrl.value }] : []
+}
+
 function syncQueryFile(file: File) {
   queryFile.value = file
   clearQueryObjectUrl()
@@ -67,32 +72,37 @@ function syncQueryFile(file: File) {
   progress.value = 0
 }
 
-const beforeQueryUpload: UploadProps['beforeUpload'] = (rawFile) => {
+function handleSelectedQueryFile(rawFile: File) {
   const isValidType = ['image/jpeg', 'image/png'].includes(rawFile.type)
   if (!isValidType) {
-    uploadFileList.value =
-      queryFile.value && queryObjectUrl.value ? [{ name: queryFile.value.name, url: queryObjectUrl.value }] : []
+    restoreQueryUploadList()
     errorMessage.value = '仅支持 JPG、JPEG、PNG 格式图片'
-    return false
+    return
   }
 
   const isValidSize = rawFile.size / 1024 / 1024 <= 10
   if (!isValidSize) {
-    uploadFileList.value =
-      queryFile.value && queryObjectUrl.value ? [{ name: queryFile.value.name, url: queryObjectUrl.value }] : []
+    restoreQueryUploadList()
     errorMessage.value = '图片大小不能超过 10MB'
-    return false
+    return
   }
 
   errorMessage.value = null
   syncQueryFile(rawFile)
-  return false
+}
+
+const handleQueryUploadChange: UploadProps['onChange'] = (uploadFile) => {
+  if (!uploadFile.raw) {
+    restoreQueryUploadList()
+    return
+  }
+  handleSelectedQueryFile(uploadFile.raw)
 }
 
 const handleUploadExceed: UploadProps['onExceed'] = (files) => {
   const nextFile = files[0] as UploadRawFile | undefined
   if (!nextFile) return
-  void beforeQueryUpload(nextFile)
+  handleSelectedQueryFile(nextFile)
 }
 
 function stopProgress() {
@@ -200,7 +210,7 @@ function goGallery() {
               :limit="1"
               accept=".jpg,.jpeg,.png,image/jpeg,image/png"
               :disabled="loading"
-              :before-upload="beforeQueryUpload"
+              :on-change="handleQueryUploadChange"
               :on-exceed="handleUploadExceed"
             >
               <div v-if="queryObjectUrl" class="upload-preview">
