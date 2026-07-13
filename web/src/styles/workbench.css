@@ -80,8 +80,8 @@
 
 .workbench-form__bottom-item {
   position: absolute;
-  left: 20px;
-  right: 20px;
+  left: 15px;
+  right: 15px;
   bottom: 20px;
   margin-bottom: 0;
 }
@@ -446,9 +446,10 @@
 }
 
 .query-name {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 22px;
   font-weight: 500;
+  margin-top: 10px;
   color: var(--panel-title);
 }
 

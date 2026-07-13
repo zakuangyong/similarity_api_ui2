@@ -10,6 +10,7 @@ import { loadLastQueryName } from '@/state/runCache'
 const route = useRoute()
 const runId = computed(() => String(route.params.runId || 'latest'))
 const candidateId = computed(() => String(route.params.candidateId || ''))
+type DetailTabName = 'contour' | 'parts'
 
 const data = ref<CandidateDetailResponse | null>(null)
 const loading = ref(false)
@@ -30,7 +31,14 @@ const filteredEvidence = computed(() => {
 const zoomOpen = ref(false)
 const zoomUrl = ref('')
 const zoomAlt = ref('')
+const activeDetailTab = ref<DetailTabName>('contour')
 
+/**
+ * 打开放大预览弹层。
+ * @param {string} url 要预览的图片地址。
+ * @param {string} alt 预览图片的替代文本。
+ * @returns {void}
+ */
 function openZoom(url: string, alt: string) {
   if (!url) return
   zoomUrl.value = url
@@ -39,6 +47,10 @@ function openZoom(url: string, alt: string) {
   document.documentElement.style.overflow = 'hidden'
 }
 
+/**
+ * 关闭放大预览弹层，并恢复页面滚动。
+ * @returns {void}
+ */
 function closeZoom() {
   zoomOpen.value = false
   zoomUrl.value = ''
@@ -46,6 +58,11 @@ function closeZoom() {
   document.documentElement.style.overflow = ''
 }
 
+/**
+ * 处理全局按键事件，支持通过 Escape 关闭预览。
+ * @param {KeyboardEvent} e 键盘事件对象。
+ * @returns {void}
+ */
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') closeZoom()
 }
@@ -77,6 +94,11 @@ onUnmounted(() => {
   document.documentElement.style.overflow = ''
 })
 
+/**
+ * 根据标签文案返回总分标签样式。
+ * @param {ScoreTag} tag 相似度标签。
+ * @returns {string} 样式类名。
+ */
 function tagClass(tag: ScoreTag) {
   if (tag === '高相似') return 'tag good'
   if (tag === '中高相似') return 'tag'
@@ -84,12 +106,22 @@ function tagClass(tag: ScoreTag) {
   return 'tag danger'
 }
 
+/**
+ * 根据标签文案返回部件评分标签样式。
+ * @param {ScoreTag} tag 相似度标签。
+ * @returns {string} 样式类名。
+ */
 function partBadgeClass(tag: ScoreTag) {
   if (tag === '高相似') return 'part-badge'
   if (tag === '中高相似') return 'part-badge mid'
   return 'part-badge warn'
 }
 
+/**
+ * 根据部件名称返回截图裁切样式。
+ * @param {string} partName 部件名称。
+ * @returns {string} 裁切样式类名。
+ */
 function cropClass(partName: string) {
   if (partName === '后视镜') return 'tile-crop mirror'
   if (partName === '车灯') return 'tile-crop light'
@@ -105,25 +137,21 @@ function cropClass(partName: string) {
       <section class="detail-sidebar" aria-label="候选详情摘要">
         <div class="detail-sidebar__stack">
           <div class="detail-sidebar__section">
-            <p class="field-title">查询图片</p>
+            <div class="query-name">查询图片：当前待比对原图</div>
             <article class="query-card detail-sidebar__image-card">
-              <img v-if="queryThumb" :src="queryThumb" alt="查询图片" />
-              <div v-else class="detail-sidebar__image-placeholder">暂无查询图片</div>
-              <div class="query-meta">
-                <div class="query-name">上传比对图片</div>
-                <div class="query-note" :title="queryName || data?.query.name">{{ queryName || data?.query.name || '未命名查询' }}</div>
+              <div class="detail-sidebar__image-media">
+                <img v-if="queryThumb" :src="queryThumb" alt="查询图片" />
+                <div v-else class="detail-sidebar__image-placeholder">查询图片暂未提供</div>
               </div>
             </article>
           </div>
 
           <div class="detail-sidebar__section">
-            <p class="field-title">候选图片</p>
+            <div class="query-name">候选图片：{{ data?.candidate.name || (loading ? '候选车型名称加载中...' : '候选车型名称暂未提供') }}</div>
             <article class="query-card detail-sidebar__image-card">
-              <img v-if="data?.candidate.image_url" :src="data.candidate.image_url" alt="候选图片" />
-              <div v-else class="detail-sidebar__image-placeholder">{{ loading ? '正在加载候选图片...' : '暂无候选图片' }}</div>
-              <div class="query-meta">
-                <div class="query-name">候选车型</div>
-                <div class="query-note" :title="data?.candidate.name">{{ data?.candidate.name || '等待加载' }}</div>
+              <div class="detail-sidebar__image-media">
+                <img v-if="data?.candidate.image_url" :src="data.candidate.image_url" alt="候选图片" />
+                <div v-else class="detail-sidebar__image-placeholder">{{ loading ? '候选图片加载中...' : '候选图片暂未提供' }}</div>
               </div>
             </article>
           </div>
@@ -156,22 +184,16 @@ function cropClass(partName: string) {
           <div v-else-if="data" class="detail-canvas">
             <div class="detail-sticky-head">
               <header class="topbar">
-                <h1>A车 vs B车 相似度分析详情</h1>
-                <RouterLink class="back" :to="{ name: 'workbench', query: { restore: '1' } }" aria-label="返回概览">返回概览</RouterLink>
+                <h2>相似度分析详情</h2>
               </header>
 
-              <nav class="anchor-nav" aria-label="详情页快捷导航">
-                <a href="#overview">概览</a>
-                <a href="#contour">轮廓</a>
-                <a href="#evidence">部件详情</a>
-              </nav>
             </div>
 
             <section id="overview" class="panel summary" aria-label="相似度总结">
               <article class="score-card">
                 <div class="label">总相似度</div>
                 <div class="big-score">{{ (data?.summary.final_score ?? 78.8).toFixed(1).replace(/\.0$/, '') }}</div>
-                <div :class="tagClass(data?.summary.tag ?? '中高相似')">{{ data?.summary.tag ?? '中高相似' }}</div>
+                <div class="tag1"  :class="tagClass(data?.summary.tag ?? '中高相似')">{{ data?.summary.tag ?? '中高相似' }}</div>
               </article>
 
               <article class="summary-points">
@@ -190,125 +212,151 @@ function cropClass(partName: string) {
                     <span class="weight-name">轮廓分 · 权重 40%</span>
                     <span class="weight-score">{{ (data?.summary.weights.contour.score ?? 90.6).toFixed(1).replace(/\.0$/, '') }}</span>
                   </div>
-                  <div class="bar" :style="{ '--value': `${data?.summary.weights.contour.score ?? 90.6}%` }"><span></span></div>
+                  <el-progress
+                    class="weight-progress"
+                    :percentage="data?.summary.weights.contour.score ?? 90.6"
+                    :stroke-width="8"
+                    :show-text="false"
+               
+                  />
                 </div>
                 <div class="weight-row">
                   <div class="weight-head">
                     <span class="weight-name">部件分 · 权重 60%</span>
                     <span class="weight-score">{{ (data?.summary.weights.parts.score ?? 78.8).toFixed(1).replace(/\.0$/, '') }}</span>
                   </div>
-                  <div class="bar" :style="{ '--value': `${data?.summary.weights.parts.score ?? 78.8}%` }"><span></span></div>
+                  <el-progress
+                    class="weight-progress"
+                    :percentage="data?.summary.weights.parts.score ?? 78.8"
+                    :stroke-width="8"
+                    :show-text="false"
+                
+                  />
                 </div>
               </article>
             </section>
 
-            <section id="contour" class="panel section" aria-label="整体轮廓相似对比">
-              <div class="section-head">
-                <h2>整体轮廓相似对比</h2>
-              </div>
-
-              <div class="contour-layout">
-                <aside class="contour-card">
-                  <div class="label">轮廓分（40%）</div>
-                  <div class="contour-score">{{ (data?.contour.score ?? 90.6).toFixed(1).replace(/\.0$/, '') }}</div>
-                  <div :class="tagClass(data?.contour.tag ?? '高相似')">{{ data?.contour.tag ?? '高相似' }}</div>
-                  <div class="legend" aria-label="轮廓差异图图例">
-                    <div class="legend-item"><span class="swatch yellow"></span>黄色：两车高度重合区域</div>
-                    <div class="legend-item"><span class="swatch red"></span>红色：A 图独有形状区域</div>
-                    <div class="legend-item"><span class="swatch green"></span>绿色：B 图独有形状区域</div>
-                  </div>
-                  <p class="contour-copy">{{ data?.contour.conclusion ?? '结论：两车正面主体轮廓接近，差异主要集中在车头下沿、车顶线和局部外扩区域。' }}</p>
-                </aside>
-
-                <div class="image-grid">
-                  <figure class="image-card large">
-                    <div class="diff-map" role="img" aria-label="整车轮廓差异图">
-                      <img :src="data?.contour.diff_image_url || '/prototype-assets/edge_diff.jpg'" alt="整车轮廓差异图" />
-                    </div>
-                    <figcaption class="image-caption">整车轮廓差异图</figcaption>
-                  </figure>
-                  <div class="contour-footnote">红色和绿色只用于表达差异，不作为普通高亮色使用</div>
+            <section class="panel detail-tabs-panel" aria-label="详情切换面板">
+              <div class="detail-tabs-panel__head">
+                <div>
+                  <h2 class="detail-tabs-panel__title">分析详情</h2>
+                  <p class="detail-tabs-panel__desc">按维度查看整车轮廓与部件识别结果，保持原有证据卡片和图片对照结构。</p>
                 </div>
               </div>
-            </section>
+              <el-tabs v-model="activeDetailTab" class="detail-tabs">
+                <el-tab-pane label="整体轮廓相似对比" name="contour">
+                  <section id="contour" class="section detail-tab-section" aria-label="整体轮廓相似对比">
+                    <div class="section-head">
+                      <h2>整体轮廓相似对比</h2>
+                    </div>
 
-            <section id="parts" class="panel section" aria-label="部件识别与对齐标注">
-              <div class="section-head">
-                <h2>部件识别与对齐标注</h2>
-                <div class="section-note">先给部件总分，再给每个部件的可追溯证据</div>
-              </div>
+                    <div class="contour-layout">
+                      <aside class="contour-card">
+                        <div class="label">轮廓分（40%）</div>
+                        <div class="contour-score">{{ (data?.contour.score ?? 90.6).toFixed(1).replace(/\.0$/, '') }}</div>
+                        <div :class="tagClass(data?.contour.tag ?? '高相似')">{{ data?.contour.tag ?? '高相似' }}</div>
+                        <div class="legend" aria-label="轮廓差异图图例">
+                          <div class="legend-item"><span class="swatch yellow"></span>黄色：两车高度重合区域</div>
+                          <div class="legend-item"><span class="swatch red"></span>红色：A 图独有形状区域</div>
+                          <div class="legend-item"><span class="swatch green"></span>绿色：B 图独有形状区域</div>
+                        </div>
+                        <p class="contour-copy">{{ data?.contour.conclusion ?? '结论：两车正面主体轮廓接近，差异主要集中在车头下沿、车顶线和局部外扩区域。' }}</p>
+                      </aside>
 
-              <div class="parts-summary">
-                <article class="part-score-card">
-                  <div class="label">部件分（60%）</div>
-                  <div class="big-score">{{ (data?.parts.score ?? 78.8).toFixed(1).replace(/\.0$/, '') }}</div>
-                  <div :class="tagClass(data?.parts.tag ?? '中高相似')">{{ data?.parts.tag ?? '中高相似' }}</div>
-                </article>
-                <div class="parts-image-pair">
-                  <figure class="image-card">
-                    <img :src="data?.parts.a_annotation_url ?? '/prototype-assets/A_annotation.jpg'" alt="A 图部件识别标注" />
-                    <button
-                      class="zoom-btn"
-                      type="button"
-                      aria-label="放大图片"
-                      @click="openZoom(data?.parts.a_annotation_url ?? '/prototype-assets/A_annotation.jpg', 'A 图部件识别标注')"
-                    >
-                      <ZoomIn class="zoom-icon" />
-                    </button>
-                    <figcaption class="image-caption">A 图部件识别</figcaption>
-                  </figure>
-                  <figure class="image-card">
-                    <img :src="data?.parts.b_annotation_url ?? '/prototype-assets/B_annotation.jpg'" alt="B 图部件识别标注" />
-                    <button
-                      class="zoom-btn"
-                      type="button"
-                      aria-label="放大图片"
-                      @click="openZoom(data?.parts.b_annotation_url ?? '/prototype-assets/B_annotation.jpg', 'B 图部件识别标注')"
-                    >
-                      <ZoomIn class="zoom-icon" />
-                    </button>
-                    <figcaption class="image-caption">B 图部件识别</figcaption>
-                  </figure>
-                </div>
-              </div>
+                      <div class="image-grid">
+                        <figure class="image-card large">
+                          <div class="diff-map" role="img" aria-label="整车轮廓差异图">
+                            <img :src="data?.contour.diff_image_url || '/prototype-assets/edge_diff.jpg'" alt="整车轮廓差异图" />
+                          </div>
+                          <figcaption class="image-caption">整车轮廓差异图</figcaption>
+                        </figure>
+                        <div class="contour-footnote">红色和绿色只用于表达差异，不作为普通高亮色使用</div>
+                      </div>
+                    </div>
+                  </section>
+                </el-tab-pane>
 
-              <div id="evidence" class="part-grid">
-                <article v-for="p in filteredEvidence" :key="p.part_name" class="part-card">
-                  <div class="part-head">
-                    <div class="part-title">{{ p.part_name }}相似度评分：{{ p.fused.toFixed(1).replace(/\.0$/, '') }}</div>
-                    <div :class="partBadgeClass(p.tag)">{{ p.tag }}</div>
-                  </div>
-                  <div class="tiles">
-                    <div class="part-tile">
-                      <img :class="cropClass(p.part_name)" :src="p.tiles.a_color" :alt="`A 原图 ${p.part_name}`" />
-                      <div class="part-caption">A 原图</div>
+                <el-tab-pane label="部件识别与对齐标注" name="parts">
+                  <section id="parts" class="section detail-tab-section" aria-label="部件识别与对齐标注">
+                    <div class="section-head">
+                      <h2>部件识别与对齐标注</h2>
+                      <div class="section-note">先给部件总分，再给每个部件的可追溯证据</div>
                     </div>
-                    <div class="part-tile">
-                      <img :class="cropClass(p.part_name)" :src="p.tiles.b_color" :alt="`B 原图 ${p.part_name}`" />
-                      <div class="part-caption">B 原图</div>
+
+                    <div class="parts-summary">
+                      <article class="part-score-card">
+                        <div class="label">部件分（60%）</div>
+                        <div class="big-score">{{ (data?.parts.score ?? 78.8).toFixed(1).replace(/\.0$/, '') }}</div>
+                        <div :class="tagClass(data?.parts.tag ?? '中高相似')">{{ data?.parts.tag ?? '中高相似' }}</div>
+                      </article>
+                      <div class="parts-image-pair">
+                        <figure class="image-card">
+                          <img :src="data?.parts.a_annotation_url ?? '/prototype-assets/A_annotation.jpg'" alt="A 图部件识别标注" />
+                          <button
+                            class="zoom-btn"
+                            type="button"
+                            aria-label="放大图片"
+                            @click="openZoom(data?.parts.a_annotation_url ?? '/prototype-assets/A_annotation.jpg', 'A 图部件识别标注')"
+                          >
+                            <ZoomIn class="zoom-icon" />
+                          </button>
+                          <figcaption class="image-caption">A 图部件识别</figcaption>
+                        </figure>
+                        <figure class="image-card">
+                          <img :src="data?.parts.b_annotation_url ?? '/prototype-assets/B_annotation.jpg'" alt="B 图部件识别标注" />
+                          <button
+                            class="zoom-btn"
+                            type="button"
+                            aria-label="放大图片"
+                            @click="openZoom(data?.parts.b_annotation_url ?? '/prototype-assets/B_annotation.jpg', 'B 图部件识别标注')"
+                          >
+                            <ZoomIn class="zoom-icon" />
+                          </button>
+                          <figcaption class="image-caption">B 图部件识别</figcaption>
+                        </figure>
+                      </div>
                     </div>
-                    <div class="part-tile">
-                      <img :class="cropClass(p.part_name)" :src="p.tiles.a_gray" :alt="`A 灰度图 ${p.part_name}`" />
-                      <div class="part-caption">A 灰度图</div>
+
+                    <div id="evidence" class="part-grid">
+                      <article v-for="p in filteredEvidence" :key="p.part_name" class="part-card">
+                        <div class="part-head">
+                          <div class="part-title">{{ p.part_name }}相似度评分：{{ p.fused.toFixed(1).replace(/\.0$/, '') }}</div>
+                          <div :class="partBadgeClass(p.tag)">{{ p.tag }}</div>
+                        </div>
+                        <div class="tiles">
+                          <div class="part-tile">
+                            <img :class="cropClass(p.part_name)" :src="p.tiles.a_color" :alt="`A 原图 ${p.part_name}`" />
+                            <div class="part-caption">A 原图</div>
+                          </div>
+                          <div class="part-tile">
+                            <img :class="cropClass(p.part_name)" :src="p.tiles.b_color" :alt="`B 原图 ${p.part_name}`" />
+                            <div class="part-caption">B 原图</div>
+                          </div>
+                          <div class="part-tile">
+                            <img :class="cropClass(p.part_name)" :src="p.tiles.a_gray" :alt="`A 灰度图 ${p.part_name}`" />
+                            <div class="part-caption">A 灰度图</div>
+                          </div>
+                          <div class="part-tile">
+                            <img :class="cropClass(p.part_name)" :src="p.tiles.b_gray" :alt="`B 灰度图 ${p.part_name}`" />
+                            <div class="part-caption">B 灰度图</div>
+                          </div>
+                          <div class="part-tile">
+                            <img v-if="p.tiles.diff" :src="p.tiles.diff" :alt="`内部差异 ${p.part_name}`" />
+                            <div v-else class="tile-diff"></div>
+                            <div class="part-caption">内部差异</div>
+                          </div>
+                        </div>
+                        <div class="metrics">
+                          <div class="metric"><span>CLIP</span><b>{{ p.metrics?.clip?.toFixed(1) ?? '—' }}</b></div>
+                          <div class="metric"><span>DINO</span><b>{{ p.metrics?.dino?.toFixed(1) ?? '—' }}</b></div>
+                          <div class="metric"><span>SSIM</span><b>{{ p.metrics?.ssim?.toFixed(1) ?? '—' }}</b></div>
+                          <div class="metric"><span>EDGE</span><b>{{ p.metrics?.edge?.toFixed(1) ?? '—' }}</b></div>
+                        </div>
+                      </article>
                     </div>
-                    <div class="part-tile">
-                      <img :class="cropClass(p.part_name)" :src="p.tiles.b_gray" :alt="`B 灰度图 ${p.part_name}`" />
-                      <div class="part-caption">B 灰度图</div>
-                    </div>
-                    <div class="part-tile">
-                      <img v-if="p.tiles.diff" :src="p.tiles.diff" :alt="`内部差异 ${p.part_name}`" />
-                      <div v-else class="tile-diff"></div>
-                      <div class="part-caption">内部差异</div>
-                    </div>
-                  </div>
-                  <div class="metrics">
-                    <div class="metric"><span>CLIP</span><b>{{ p.metrics?.clip?.toFixed(1) ?? '—' }}</b></div>
-                    <div class="metric"><span>DINO</span><b>{{ p.metrics?.dino?.toFixed(1) ?? '—' }}</b></div>
-                    <div class="metric"><span>SSIM</span><b>{{ p.metrics?.ssim?.toFixed(1) ?? '—' }}</b></div>
-                    <div class="metric"><span>EDGE</span><b>{{ p.metrics?.edge?.toFixed(1) ?? '—' }}</b></div>
-                  </div>
-                </article>
-              </div>
+                  </section>
+                </el-tab-pane>
+              </el-tabs>
             </section>
           </div>
           <div v-else class="empty-wrap" role="status">
