@@ -160,6 +160,60 @@ onBeforeUnmount(() => {
 })
 
 onMounted(() => {
+  const imageUrlRaw = route.query.imageUrl
+  const imageUrl =
+    typeof imageUrlRaw === 'string' ? imageUrlRaw : Array.isArray(imageUrlRaw) ? imageUrlRaw[0] ?? null : null
+
+  if (imageUrl) {
+    void (async () => {
+      try {
+        const res = await fetch(imageUrl)
+        if (!res.ok) {
+          throw new Error(`图片获取失败（HTTP ${res.status}）`)
+        }
+        const blob = await res.blob()
+
+        let fileName = ''
+        try {
+          const url = new URL(imageUrl)
+          fileName = url.pathname.split('/').filter(Boolean).pop() ?? ''
+        } catch {
+          fileName = imageUrl.split('?')[0]?.split('#')[0]?.split('/').filter(Boolean).pop() ?? ''
+        }
+
+        try {
+          fileName = decodeURIComponent(fileName)
+        } catch {}
+
+        let mime = blob.type || ''
+        if (mime === 'image/jpg') mime = 'image/jpeg'
+
+        const ext = fileName.split('.').pop()?.toLowerCase()
+        if (!mime) {
+          if (ext === 'png') mime = 'image/png'
+          if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg'
+        }
+
+        if (!fileName) {
+          fileName = mime === 'image/png' ? 'query.png' : 'query.jpg'
+        } else if (!/\.(png|jpe?g)$/i.test(fileName)) {
+          fileName = `${fileName}${mime === 'image/png' ? '.png' : '.jpg'}`
+        }
+
+        const file = new File([blob], fileName, { type: mime || undefined })
+        handleSelectedQueryFile(file)
+      } catch (e) {
+        queryFile.value = null
+        clearQueryObjectUrl()
+        uploadFileList.value = []
+        run.value = null
+        progress.value = 0
+        errorMessage.value = e instanceof Error ? e.message : String(e)
+      }
+    })()
+    return
+  }
+
   if (route.query.restore === '1') {
     run.value = loadLastCompare()
   }
@@ -235,9 +289,6 @@ function goGallery() {
         <el-form-item label="返回结果Top-N">
           <el-input-number v-model="topk" class="topk-input" :min="1" :max="20" :step="1" :controls="false" :disabled="loading" />
         </el-form-item>
-        <el-form-item label-position="top">
-            <el-button class="gallery-entry" :disabled="loading" @click="goGallery">图库管理</el-button>
-            </el-form-item>
         <el-form-item v-if="errorMessage" class="workbench-form__item workbench-form__item--error" label-width="0">
           <div class="error" role="status">{{ errorMessage }}</div>
         </el-form-item>
@@ -247,6 +298,10 @@ function goGallery() {
             <el-button class="primary" type="primary" :disabled="loading" @click="startCompare">开始比对</el-button>
           </div>
         </el-form-item>
+
+        <el-form-item class="workbench-form__item workbench-form__bottom-item" label-width="0">
+          <el-button class="gallery-entry" :disabled="loading" @click="goGallery">查看图库</el-button>
+        </el-form-item>
       </el-form>
     </template>
 
@@ -255,19 +310,13 @@ function goGallery() {
         <div class="result-head">
           <div>
             <h2>分析结果</h2>
-            <p class="result-meta">{{ resultSummary }}</p>
           </div>
         </div>
         <div class="result-stage">
           <template v-if="run">
-            <article class="query-card">
-              <img v-if="queryPreview" :src="queryPreview" alt="上传待比对车辆" />
-              <div class="query-meta">
-                <div class="query-name">上传比对图片</div>
-                <div class="query-note" :title="uploadedVehicleName || run.query_name">当前车型：{{ uploadedVehicleName || run.query_name }}</div>
-              </div>
-            </article>
-
+            <div v-if="queryPreview" class="query-card">
+              <img :src="queryPreview" alt="上传待比对车辆" />
+            </div>
             <div class="candidate-grid" aria-label="Top-K 相似候选">
               <RouterLink
                 v-for="(item, idx) in results"
@@ -275,12 +324,17 @@ function goGallery() {
                 class="candidate-card"
                 :to="{ name: 'detail', params: { runId: run.run_id, candidateId: item.candidate_id }, query: { q: uploadedVehicleName || run.query_name } }"
               >
-                <span class="badge rank">Top {{ idx + 1 }}</span>
-                <span class="badge" :class="scoreClass(item.final_score)">{{ item.final_score.toFixed(1).replace(/\.0$/, '') }} · {{ scoreTagText(item.final_score) }}</span>
-                <img :src="item.candidate_path" :alt="`候选车辆：${item.candidate_name}`" />
+                <div class="card-media">
+                  <span
+                    :class="['badge', 'rank', { 'rank-1': idx === 0, 'rank-2': idx === 1, 'rank-3': idx === 2 }]"
+                  >
+                    Top {{ idx + 1 }}
+                  </span>
+                  <img :src="item.candidate_path" :alt="`候选车辆：${item.candidate_name}`" />
+                </div>
                 <div class="card-foot">
                   <span class="car-name" :title="item.candidate_name">{{ item.candidate_name }}</span>
-                  <span class="detail-link">查看详情</span>
+                  <span class="badge footer-score" :class="scoreClass(item.final_score)">{{ item.final_score.toFixed(1).replace(/\.0$/, '') }} · {{ scoreTagText(item.final_score) }}</span>
                 </div>
               </RouterLink>
             </div>

@@ -33,3 +33,4 @@ Thumbs.db
 docs/*
 
 .trae/
+node_modules
