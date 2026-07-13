@@ -24,7 +24,7 @@ onMounted(async () => {
   }
 })
 
-const subText = computed(() => `${items.value.length} 张可检索图片 · ${viewLabel}车辆图库`)
+const subText = computed(() => `${items.value.length} 张图库图片 · ${viewLabel}车辆图库`)
 const totalPages = computed(() => Math.max(1, Math.ceil(items.value.length / pageSize.value)))
 const pagedItems = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
