@@ -325,7 +325,11 @@ function goGallery() {
                 :to="{ name: 'detail', params: { runId: run.run_id, candidateId: item.candidate_id }, query: { q: uploadedVehicleName || run.query_name } }"
               >
                 <div class="card-media">
-                  <span class="badge rank">Top {{ idx + 1 }}</span>
+                  <span
+                    :class="['badge', 'rank', { 'rank-1': idx === 0, 'rank-2': idx === 1, 'rank-3': idx === 2 }]"
+                  >
+                    Top {{ idx + 1 }}
+                  </span>
                   <img :src="item.candidate_path" :alt="`候选车辆：${item.candidate_name}`" />
                 </div>
                 <div class="card-foot">

@@ -516,20 +516,46 @@
 
 .badge {
   position: absolute;
-  border-radius: 5px;
+  border-radius: 8px;
   background: rgba(16, 17, 18, 0.82);
   border: 1px solid var(--border-medium);
-  padding: 3px 8px;
-  font-size: 10px;
-  line-height: 16px;
-  font-weight: 500;
+  padding: 5px 12px;
+  min-height: 28px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
   backdrop-filter: blur(8px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rank {
-  top: 20px;
-  left: 20px;
+  top: 14px;
+  left: 14px;
   color: var(--panel-text);
+  letter-spacing: 0.01em;
+}
+
+.rank-1 {
+  color: #fff4bf;
+  border-color: rgba(250, 204, 21, 0.52);
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.24) 0%, rgba(16, 17, 18, 0.88) 100%);
+  box-shadow: 0 8px 18px rgba(250, 204, 21, 0.16);
+}
+
+.rank-2 {
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.52);
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.2) 0%, rgba(16, 17, 18, 0.88) 100%);
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.12);
+}
+
+.rank-3 {
+  color: #fed7aa;
+  border-color: rgba(249, 115, 22, 0.48);
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.2) 0%, rgba(16, 17, 18, 0.88) 100%);
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.12);
 }
 
 .score {
