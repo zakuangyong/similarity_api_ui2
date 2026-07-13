@@ -128,24 +128,7 @@ function cropClass(partName: string) {
             </article>
           </div>
 
-          <div v-if="data" class="detail-sidebar__section">
-            <p class="field-title">评分摘要</p>
-            <div class="detail-sidebar__score-grid">
-              <article class="detail-sidebar__score-card">
-                <span class="detail-sidebar__score-label">总相似度</span>
-                <strong class="detail-sidebar__score-value">{{ data.summary.final_score.toFixed(1).replace(/\.0$/, '') }}</strong>
-                <span :class="tagClass(data.summary.tag)">{{ data.summary.tag }}</span>
-              </article>
-              <article class="detail-sidebar__mini-card">
-                <span class="detail-sidebar__score-label">轮廓分</span>
-                <strong class="detail-sidebar__mini-value">{{ data.contour.score.toFixed(1).replace(/\.0$/, '') }}</strong>
-              </article>
-              <article class="detail-sidebar__mini-card">
-                <span class="detail-sidebar__score-label">部件分</span>
-                <strong class="detail-sidebar__mini-value">{{ data.parts.score.toFixed(1).replace(/\.0$/, '') }}</strong>
-              </article>
-            </div>
-          </div>
+    
 
           <div v-if="errorMessage" class="error" role="status">{{ errorMessage }}</div>
         </div>

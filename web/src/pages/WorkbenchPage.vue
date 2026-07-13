@@ -310,19 +310,13 @@ function goGallery() {
         <div class="result-head">
           <div>
             <h2>分析结果</h2>
-            <p class="result-meta">{{ resultSummary }}</p>
           </div>
         </div>
         <div class="result-stage">
           <template v-if="run">
-            <article class="query-card">
-              <img v-if="queryPreview" :src="queryPreview" alt="上传待比对车辆" />
-              <div class="query-meta">
-                <div class="query-name">上传比对图片</div>
-                <div class="query-note" :title="uploadedVehicleName || run.query_name">当前车型：{{ uploadedVehicleName || run.query_name }}</div>
-              </div>
-            </article>
-
+            <div v-if="queryPreview" class="query-card">
+              <img :src="queryPreview" alt="上传待比对车辆" />
+            </div>
             <div class="candidate-grid" aria-label="Top-K 相似候选">
               <RouterLink
                 v-for="(item, idx) in results"
@@ -330,12 +324,13 @@ function goGallery() {
                 class="candidate-card"
                 :to="{ name: 'detail', params: { runId: run.run_id, candidateId: item.candidate_id }, query: { q: uploadedVehicleName || run.query_name } }"
               >
-                <span class="badge rank">Top {{ idx + 1 }}</span>
-                <span class="badge" :class="scoreClass(item.final_score)">{{ item.final_score.toFixed(1).replace(/\.0$/, '') }} · {{ scoreTagText(item.final_score) }}</span>
-                <img :src="item.candidate_path" :alt="`候选车辆：${item.candidate_name}`" />
+                <div class="card-media">
+                  <span class="badge rank">Top {{ idx + 1 }}</span>
+                  <img :src="item.candidate_path" :alt="`候选车辆：${item.candidate_name}`" />
+                </div>
                 <div class="card-foot">
                   <span class="car-name" :title="item.candidate_name">{{ item.candidate_name }}</span>
-                  <span class="detail-link">查看详情</span>
+                  <span class="badge footer-score" :class="scoreClass(item.final_score)">{{ item.final_score.toFixed(1).replace(/\.0$/, '') }} · {{ scoreTagText(item.final_score) }}</span>
                 </div>
               </RouterLink>
             </div>
