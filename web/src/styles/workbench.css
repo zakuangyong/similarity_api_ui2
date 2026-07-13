@@ -2,6 +2,9 @@
   height: calc(100% - 34px);
   display: flex;
   flex-direction: column;
+  position: relative;
+  box-sizing: border-box;
+  padding-bottom: 56px;
 }
 
 .workbench-form :deep(.el-form-item) {
@@ -65,12 +68,21 @@
 
 .workbench-form__item--upload :deep(.el-form-item__content),
 .workbench-form__item--error :deep(.el-form-item__content),
-.workbench-form__actions-item :deep(.el-form-item__content) {
+.workbench-form__actions-item :deep(.el-form-item__content),
+.workbench-form__bottom-item :deep(.el-form-item__content) {
   display: block;
 }
 
 .workbench-form__actions-item {
   margin-top: auto;
+  margin-bottom: 12px;
+}
+
+.workbench-form__bottom-item {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
   margin-bottom: 0;
 }
 

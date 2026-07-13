@@ -289,9 +289,6 @@ function goGallery() {
         <el-form-item label="返回结果Top-N">
           <el-input-number v-model="topk" class="topk-input" :min="1" :max="20" :step="1" :controls="false" :disabled="loading" />
         </el-form-item>
-        <el-form-item label-position="top">
-            <el-button class="gallery-entry" :disabled="loading" @click="goGallery">图库管理</el-button>
-            </el-form-item>
         <el-form-item v-if="errorMessage" class="workbench-form__item workbench-form__item--error" label-width="0">
           <div class="error" role="status">{{ errorMessage }}</div>
         </el-form-item>
@@ -300,6 +297,10 @@ function goGallery() {
           <div class="panel-actions">
             <el-button class="primary" type="primary" :disabled="loading" @click="startCompare">开始比对</el-button>
           </div>
+        </el-form-item>
+
+        <el-form-item class="workbench-form__item workbench-form__bottom-item" label-width="0">
+          <el-button class="gallery-entry" :disabled="loading" @click="goGallery">查看图库</el-button>
         </el-form-item>
       </el-form>
     </template>
