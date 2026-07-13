@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import shutil
 import tempfile
 from pathlib import Path
@@ -22,6 +23,9 @@ from .pipeline_api import (
     run_compare,
 )
 from .settings import load_settings
+
+
+GALLERY_DISPLAY_DIR_NAME = "img-store"
 
 
 def create_app() -> FastAPI:
@@ -137,12 +141,19 @@ def create_app() -> FastAPI:
 
     @app.get("/api/gallery")
     def api_gallery(view: str = "front", vehicle_type: str = "SUV"):
-        input_dir = (settings.img_root / view).resolve() if view else settings.img_root
+        input_dir = (settings.img_root / GALLERY_DISPLAY_DIR_NAME).resolve()
         items = []
         for p in list_gallery_images(input_dir):
             url = path_to_url(path=p, img_root=settings.img_root, result_root=settings.result_root) or ""
             items.append({"id": p.stem, "name": p.stem, "url": url})
-        return {"total": len(items), "items": items, "view": view, "vehicle_type": vehicle_type}
+        random.shuffle(items)
+        return {
+            "total": len(items),
+            "items": items,
+            "view": view,
+            "vehicle_type": vehicle_type,
+            "display_dir": GALLERY_DISPLAY_DIR_NAME,
+        }
 
     @app.get("/api/runs/{run_id}/candidates/{candidate_id}")
     def api_candidate_detail(run_id: str, candidate_id: str):
