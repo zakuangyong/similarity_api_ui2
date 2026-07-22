@@ -25,6 +25,12 @@ DEFAULT_PART_FEATURE_WEIGHTS: dict[str, dict[FeatureName, float]] = {
     "hood": {"clip": 0.25, "dino": 0.5, "ssim": 0.15, "edge": 0.1},
     "front_glass": {"clip": 0.20, "dino": 0.40, "ssim": 0.25, "edge": 0.15},
     "right_mirror": {"clip": 0.3, "dino": 0.45, "ssim": 0.15, "edge": 0.1},
+    "left_mirror": {"clip": 0.3, "dino": 0.45, "ssim": 0.15, "edge": 0.1},
+    "left_taillight": {"clip": 0.12, "dino": 0.38, "ssim": 0.30, "edge": 0.20},
+    "line_taillight": {"clip": 0.10, "dino": 0.35, "ssim": 0.35, "edge": 0.20},
+    "back_glass": {"clip": 0.18, "dino": 0.42, "ssim": 0.25, "edge": 0.15},
+    "back_bumper": {"clip": 0.20, "dino": 0.32, "ssim": 0.18, "edge": 0.30},
+    "trunk_lid": {"clip": 0.18, "dino": 0.45, "ssim": 0.22, "edge": 0.15},
 }
 
 DEFAULT_PART_OVERALL_WEIGHTS: dict[str, float] = {
@@ -34,6 +40,12 @@ DEFAULT_PART_OVERALL_WEIGHTS: dict[str, float] = {
     "grille": 0.18,
     "hood": 0.15,
     "front_glass": 0.15,
+    "left_mirror": 0.12,
+    "left_taillight": 0.20,
+    "line_taillight": 0.14,
+    "back_glass": 0.15,
+    "back_bumper": 0.195,
+    "trunk_lid": 0.195,
 }
 
 

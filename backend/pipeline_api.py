@@ -10,6 +10,8 @@ from typing import Any
 import cv2
 import numpy as np
 
+from tools.car_view_cls import DEFAULT_VIEW_CLS_WEIGHT, predict_vehicle_view, resolve_view_family
+
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
@@ -18,13 +20,14 @@ class GalleryRoots:
     img_root: Path
 
     def resolve_view_dir(self, view: str) -> Path:
-        v = (view or "front").strip().lower()
-        if v in {"front", "正脸", "正脸视图"}:
-            return self.img_root / "front"
-        if v in {"side", "侧面", "侧面车身视图"}:
-            return self.img_root / "side"
-        if v in {"rear", "尾部", "尾部视图"}:
-            return self.img_root / "rear"
+        v = resolve_view_family(view)[0]
+        candidates = [v]
+        if v not in {"front", "back"}:
+            candidates.extend(["front", "back"])
+        for name in candidates:
+            p = self.img_root / name
+            if p.is_dir():
+                return p
         return self.img_root / v
 
 
@@ -197,18 +200,29 @@ def run_compare(
         )
 
     roots = GalleryRoots(img_root=img_root)
-    input_dir = roots.resolve_view_dir(view)
+    prediction = predict_vehicle_view(query_image_path, model_path=DEFAULT_VIEW_CLS_WEIGHT)
+    input_dir = roots.resolve_view_dir(prediction.view)
 
     payload = run_pipeline(
         input_dir=input_dir,
         query_image=query_image_path,
         output_dir=result_root,
+        view=prediction.view,
+        view_label=prediction.raw_label,
         topk=int(topk),
     )
 
     run_id = str(payload.get("run_id") or "")
     query_id = str(payload.get("query_id") or "query")
-    label_dir = Path(str(payload.get("outputs", {}).get("front_label") or result_root / "front_label" / run_id))
+    outputs = payload.get("outputs") or {}
+    label_dir = Path(
+        str(
+            outputs.get("label_dir")
+            or outputs.get(f"{payload.get('view') or prediction.view}_label")
+            or outputs.get("front_label")
+            or result_root / "front_label" / run_id
+        )
+    )
     label_query = _find_existing_with_any_ext(label_dir, query_id)
 
     query_staged = payload.get("query_staged_path")
@@ -242,8 +256,11 @@ def run_compare(
         "query_name": "上传比对图片",
         "query_staged_path": query_url or "",
         "query_annotation_url": query_anno_url,
+        "predicted_view": str(payload.get("view") or prediction.view),
+        "predicted_view_label": str(payload.get("view_label") or prediction.raw_label),
         "vehicle_type": vehicle_type,
         "view": view,
+        "timings": payload.get("timings") or {},
         "results": results,
     }
 
@@ -252,32 +269,52 @@ def compare_from_report(*, report: dict[str, Any], img_root: Path, result_root: 
     run_id = str(report.get("run_id") or "latest")
     query = report.get("query") or {}
     query_staged = query.get("staged_path") or query.get("path")
-    query_url = path_to_url(path=str(query_staged), img_root=img_root, result_root=result_root) if query_staged else None
+    query_url = str(query.get("url") or "")
+    if not query_url and query_staged:
+        query_url = path_to_url(
+            path=str(query_staged), img_root=img_root, result_root=result_root
+        ) or ""
 
     results: list[dict[str, Any]] = []
     for row in report.get("results") or []:
         candidate_path = str(row.get("candidate_path") or "")
-        url = path_to_url(path=candidate_path, img_root=img_root, result_root=result_root)
-        candidate_name = Path(candidate_path).stem or str(row.get("candidate_id") or "")
+        url = str(row.get("candidate_url") or "")
+        if not url:
+            url = path_to_url(
+                path=candidate_path, img_root=img_root, result_root=result_root
+            ) or ""
+        candidate_name = str(
+            row.get("candidate_name")
+            or Path(candidate_path).stem
+            or row.get("candidate_id")
+            or ""
+        )
         diff = row.get("contour_diff_image")
         diff_url = path_to_url(path=str(diff), img_root=img_root, result_root=result_root) if diff else None
         results.append(
             {
                 "candidate_id": str(row.get("candidate_id") or ""),
                 "candidate_name": candidate_name,
-                "candidate_path": url or "",
+                "candidate_path": url,
                 "final_score": float(row.get("final_score") or 0.0),
                 "contour_score": None if row.get("contour_score") is None else float(row.get("contour_score")),
                 "part_score": None if row.get("part_score") is None else float(row.get("part_score")),
                 "contour_diff_image": diff_url,
                 "analysis": list(row.get("analysis") or []),
+                "vector_score": row.get("vector_score"),
+                "component_scores": row.get("component_scores"),
             }
         )
 
     return {
         "run_id": run_id,
+        "retrieval_mode": report.get("retrieval_mode"),
+        "model_version": report.get("model_version"),
         "query_name": "上传比对图片",
-        "query_staged_path": query_url or "",
+        "query_staged_path": query_url,
+        "predicted_view": str(report.get("view") or ""),
+        "predicted_view_label": str(report.get("view_label") or ""),
+        "timings": report.get("timings") or {},
         "results": results,
     }
 
@@ -307,11 +344,17 @@ def score_tag(score: float | None) -> str:
 
 PART_LABELS = {
     "right_mirror": "后视镜",
+    "left_mirror": "左后视镜",
     "front_right_light": "车灯",
     "front_bumper": "前保险杠",
     "front_glass": "前挡风玻璃",
     "grille": "中网",
     "hood": "机盖",
+    "left_taillight": "左尾灯",
+    "line_taillight": "尾灯线条",
+    "back_glass": "后挡风玻璃",
+    "back_bumper": "后保险杠",
+    "trunk_lid": "后备箱盖",
 }
 
 
@@ -322,6 +365,8 @@ def build_candidate_detail(
     img_root: Path,
     result_root: Path,
 ) -> dict[str, Any]:
+    if str(report.get("retrieval_mode") or "") == "v4":
+        return _build_v4_candidate_detail(report=report, candidate_id=candidate_id)
     run_id = str(report.get("run_id") or "latest")
     query = report.get("query") or {}
     query_id = str(query.get("id") or "query")
@@ -332,7 +377,15 @@ def build_candidate_detail(
         raise KeyError(candidate_id)
 
     outputs = report.get("outputs") or {}
-    label_dir = Path(str(outputs.get("front_label") or result_root / "front_label" / run_id))
+    view_name = str(report.get("view") or "front")
+    label_dir = Path(
+        str(
+            outputs.get("label_dir")
+            or outputs.get(f"{view_name}_label")
+            or outputs.get("front_label")
+            or result_root / f"{view_name}_label" / run_id
+        )
+    )
     label_query = _find_existing_with_any_ext(label_dir, query_id)
     label_candidate = _find_existing_with_any_ext(label_dir, candidate_id)
 
@@ -450,3 +503,107 @@ def build_candidate_detail(
             "evidence": evidence,
         },
     }
+
+
+def _build_v4_candidate_detail(
+    *, report: dict[str, Any], candidate_id: str
+) -> dict[str, Any]:
+    run_id = str(report.get("run_id") or "latest")
+    query = report.get("query") or {}
+    row = next(
+        (
+            value
+            for value in report.get("results") or []
+            if str(value.get("candidate_id")) == candidate_id
+        ),
+        None,
+    )
+    if row is None:
+        raise KeyError(candidate_id)
+
+    component_scores = dict(row.get("component_scores") or {})
+    vehicle_score = _optional_score(component_scores.get("vehicle"))
+    part_values = [
+        float(value)
+        for name, value in component_scores.items()
+        if name != "vehicle" and isinstance(value, (int, float))
+    ]
+    part_score = float(row.get("part_score") or 0.0)
+    if part_values and not part_score:
+        part_score = sum(part_values) / len(part_values)
+    final_score = float(row.get("final_score") or 0.0)
+    evidence = []
+    for component_name in (
+        "front_glass",
+        "front_right_light",
+        "front_bumper",
+        "grille",
+        "hood",
+        "right_mirror",
+    ):
+        value = _optional_score(component_scores.get(component_name))
+        if value is None:
+            continue
+        evidence.append(
+            {
+                "part_name": PART_LABELS.get(component_name, component_name),
+                "fused": value,
+                "tag": score_tag(value),
+                "tiles": {
+                    "a_color": "",
+                    "b_color": "",
+                    "a_gray": "",
+                    "b_gray": "",
+                    "diff": "",
+                },
+                "metrics": {"v4_projection": value},
+            }
+        )
+    evidence.sort(key=lambda value: float(value["fused"]), reverse=True)
+    query_url = str(query.get("url") or "")
+    candidate_url = str(row.get("candidate_url") or "")
+    return {
+        "run_id": run_id,
+        "retrieval_mode": "v4",
+        "model_version": report.get("model_version"),
+        "query": {
+            "name": "A车",
+            "image_url": query_url,
+            "annotation_url": "",
+        },
+        "candidate": {
+            "id": str(candidate_id),
+            "name": str(row.get("candidate_name") or "B车"),
+            "image_url": candidate_url,
+            "annotation_url": "",
+        },
+        "summary": {
+            "final_score": final_score,
+            "tag": score_tag(final_score),
+            "points": list(row.get("analysis") or []),
+            "weights": {
+                "contour": {"weight": 0.4, "score": vehicle_score or 0.0},
+                "parts": {"weight": 0.6, "score": part_score},
+            },
+        },
+        "contour": {
+            "score": vehicle_score or 0.0,
+            "tag": score_tag(vehicle_score),
+            "diff_image_url": "",
+            "conclusion": "V4整车投影向量相似度，用于解释整体轮廓与车身结构接近程度。",
+        },
+        "parts": {
+            "score": part_score,
+            "tag": score_tag(part_score),
+            "a_annotation_url": "",
+            "b_annotation_url": "",
+            "evidence": evidence,
+        },
+    }
+
+
+def _optional_score(value: object) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    score = float(value)
+    return score if np.isfinite(score) else None

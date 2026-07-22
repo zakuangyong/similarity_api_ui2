@@ -26,16 +26,19 @@ from similarity_pipeline import (  # noqa: E402
     ROOT,
     _config_path,
     _compare_parts,
+    _config_parts_for_view,
     _feature_list,
     _load_config,
     _parse_csv,
     _prepare_run_images,
     _run_contour_compare,
     _safe_name,
+    _view_part_weight,
     _write_reports,
     run_pipeline,
 )
 from tools import car_front_seg  # noqa: E402
+from tools.car_view_cls import normalize_view_family  # noqa: E402
 from tools.cutout_by_sam import SamModelSpec, load_sam_predictor, run_sam_cutout_from_instances  # noqa: E402
 
 
@@ -99,6 +102,17 @@ def _atomic_mode_enabled(args: argparse.Namespace) -> bool:
     return bool(args.cutout_only or args.label_only or args.contour_only)
 
 
+def _infer_batch_view(input_dir: Path, raw_view: str | None) -> str:
+    view = str(raw_view or "auto").strip().lower()
+    if view and view != "auto":
+        return normalize_view_family(view)
+    for part in reversed(input_dir.parts):
+        family = normalize_view_family(part)
+        if family in {"front", "back", "left_side", "right_side"}:
+            return family
+    return "front"
+
+
 def _run_part_atomic_steps(
     *,
     stage_dir: Path,
@@ -111,8 +125,9 @@ def _run_part_atomic_steps(
     save_label: bool,
     save_cutout: bool,
 ) -> dict[str, Any]:
-    front_weight = _config_path(config, "front_part_weight")
-    model = YOLO(str(front_weight))
+    view_family = str(getattr(args, "_view_family", normalize_view_family(getattr(args, "view", "front"))))
+    part_weight = _view_part_weight(config, view_family)
+    model = YOLO(str(part_weight))
     sam_predictor = None
     if save_cutout:
         sam_checkpoint = _resolve_path("models/sam/sam_vit_h.pth")
@@ -138,6 +153,7 @@ def _run_part_atomic_steps(
             conf=float(args.conf),
             iou=float(args.iou),
             imgsz=int(args.imgsz),
+            view=view_family,
             allowed_parts=allowed_parts,
         )
         if not processed:
@@ -155,7 +171,7 @@ def _run_part_atomic_steps(
         if save_cutout:
             part_dir = parts_dir / p.stem
             before = sum(1 for x in part_dir.glob("*") if x.is_file()) if part_dir.exists() else 0
-            car_front_seg.export_rgba_crops(bgr, processed, part_dir, p.stem)
+            car_front_seg.export_rgba_crops(bgr, processed, part_dir, p.stem, view=view_family)
             after = sum(1 for x in part_dir.glob("*") if x.is_file()) if part_dir.exists() else 0
             parts_count += max(0, after - before)
             assert sam_predictor is not None
@@ -166,6 +182,7 @@ def _run_part_atomic_steps(
                 output_dir=cutout_dir,
                 stem=p.stem,
                 sam_predictor=sam_predictor,
+                view=view_family,
                 box_margin_ratio=0.03,
                 keep_largest_component=True,
             )
@@ -174,7 +191,8 @@ def _run_part_atomic_steps(
     return {
         "images_seen": image_count,
         "labels_written": label_count,
-        "front_parts_written": parts_count,
+        "parts_written": parts_count,
+        f"{view_family}_parts_written": parts_count,
         "img_cutout_written": max(0, cutout_count_after - cutout_count_before),
     }
 
@@ -192,6 +210,7 @@ def _run_atomic_steps(
     query_output_dir.mkdir(parents=True, exist_ok=True)
     query_copy = _prepare_query_copy(query_path=query_path, query_dir=query_output_dir)
     config = _load_config(args.weight)
+    view_family = str(getattr(args, "_view_family", normalize_view_family(getattr(args, "view", "front"))))
     run_id = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     items, query_item = _prepare_run_images(
         input_dir=input_dir,
@@ -201,12 +220,12 @@ def _run_atomic_steps(
     )
 
     run_root = query_output_dir / "runs" / run_id
-    label_dir = query_output_dir / "front_label" / run_id
-    parts_dir = query_output_dir / "front_parts" / run_id
+    label_dir = query_output_dir / f"{view_family}_label" / run_id
+    parts_dir = query_output_dir / f"{view_family}_parts" / run_id
     cutout_dir = query_output_dir / "img-cutout" / run_id
     run_root.mkdir(parents=True, exist_ok=True)
 
-    parts_used = _parse_csv(args.parts) or list(config.get("parts") or [])
+    parts_used = _parse_csv(args.parts) or _config_parts_for_view(config, view_family)
     ignored = _parse_csv(args.ignore_parts)
     allowed_parts = set(p for p in parts_used if p not in set(ignored))
 
@@ -240,8 +259,12 @@ def _run_atomic_steps(
         }
 
     output_paths = {
-        "front_label": str(label_dir) if args.label_only else None,
-        "front_parts": str(parts_dir) if args.cutout_only else None,
+        "view": view_family,
+        "view_label": view_family,
+        "label_dir": str(label_dir) if args.label_only else None,
+        "parts_dir": str(parts_dir) if args.cutout_only else None,
+        f"{view_family}_label": str(label_dir) if args.label_only else None,
+        f"{view_family}_parts": str(parts_dir) if args.cutout_only else None,
         "img_cutout": str(cutout_dir) if args.cutout_only else None,
         "run_root": str(run_root) if args.contour_only else None,
     }
@@ -283,9 +306,10 @@ def _precompute_yolo_sam_cache(
     cache_root = output_dir / "_precompute"
     if cache_root.exists():
         shutil.rmtree(cache_root)
+    view_family = str(getattr(args, "_view_family", normalize_view_family(getattr(args, "view", "front"))))
     stage_dir = cache_root / "input_flat"
-    label_dir = cache_root / "front_label"
-    parts_dir = cache_root / "front_parts"
+    label_dir = cache_root / f"{view_family}_label"
+    parts_dir = cache_root / f"{view_family}_parts"
     cutout_dir = cache_root / "img-cutout"
     stage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -297,7 +321,7 @@ def _precompute_yolo_sam_cache(
         staged_paths[str(image)] = str(staged)
 
     config = _load_config(args.weight)
-    parts_used = _parse_csv(args.parts) or list(config.get("parts") or [])
+    parts_used = _parse_csv(args.parts) or _config_parts_for_view(config, view_family)
     ignored = set(_parse_csv(args.ignore_parts))
     allowed_parts = set(p for p in parts_used if p not in ignored)
     stats = _run_part_atomic_steps(
@@ -315,8 +339,12 @@ def _precompute_yolo_sam_cache(
         "input_dir": str(input_dir),
         "cache_root": str(cache_root),
         "stage_dir": str(stage_dir),
-        "front_label": str(label_dir),
-        "front_parts": str(parts_dir),
+        "view": view_family,
+        "view_label": view_family,
+        "label_dir": str(label_dir),
+        "parts_dir": str(parts_dir),
+        f"{view_family}_label": str(label_dir),
+        f"{view_family}_parts": str(parts_dir),
         "img_cutout": str(cutout_dir),
         "image_count": len(images),
         "elapsed_seconds": round(time.time() - started, 3),
@@ -379,7 +407,8 @@ def _run_cached_pairwise_query(
     compare_items = [query_item, *items]
 
     config = _load_config(args.weight)
-    parts_used = _parse_csv(args.parts) or list(config.get("parts") or [])
+    view_family = str(precompute.get("view") or getattr(args, "_view_family", normalize_view_family(getattr(args, "view", "front"))))
+    parts_used = _parse_csv(args.parts) or _config_parts_for_view(config, view_family)
     ignored = _parse_csv(args.ignore_parts)
     feature_names = _feature_list(config, args.features)
     contour = _run_contour_compare(
@@ -405,8 +434,12 @@ def _run_cached_pairwise_query(
         results = results[: int(args.topk)]
 
     output_paths = {
-        "front_label": str(precompute["front_label"]),
-        "front_parts": str(precompute["front_parts"]),
+        "view": view_family,
+        "view_label": str(precompute.get("view_label") or view_family),
+        "label_dir": str(precompute["label_dir"]),
+        "parts_dir": str(precompute["parts_dir"]),
+        f"{view_family}_label": str(precompute["label_dir"]),
+        f"{view_family}_parts": str(precompute["parts_dir"]),
         "img_cutout": str(precompute["img_cutout"]),
         "run_root": str(run_root),
     }
@@ -418,7 +451,10 @@ def _run_cached_pairwise_query(
         results=results,
         parts=parts_used,
         features=[str(x) for x in feature_names],
+        view=view_family,
+        view_label=str(precompute.get("view_label") or view_family),
         output_paths=output_paths,
+        timings={"total_seconds": round(time.time() - started, 3), "stages": [], "bottleneck": None},
     )
     item = {
         "query_name": query_name,
@@ -485,6 +521,7 @@ def _run_one_query(
         query_image=query_copy,
         weight=args.weight,
         output_dir=query_output_dir,
+        view=str(getattr(args, "_view_family", normalize_view_family(getattr(args, "view", "front")))),
         parts=args.parts,
         ignore_parts=args.ignore_parts,
         features=args.features,
@@ -543,6 +580,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--parts", default=None, help="Comma-separated parts used by the pipeline.")
     parser.add_argument("--ignore-parts", default="", help="Comma-separated parts to ignore.")
     parser.add_argument("--features", default=None, help="Comma-separated features, e.g. dino,ssim,edge.")
+    parser.add_argument("--view", default="auto", help="View family for part models/reports. Use auto to infer from --input-dir.")
     parser.add_argument("--device", choices=("cpu", "cuda"), default=None)
     parser.add_argument("--skip-seg", action="store_true")
     parser.add_argument("--skip-cutout", action="store_true")
@@ -561,6 +599,7 @@ def main(argv: list[str] | None = None) -> int:
     input_dir = _resolve_path(args.input_dir)
     output_dir = _resolve_path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    args._view_family = _infer_batch_view(input_dir, args.view)
 
     images = _collect_images(input_dir)
     if args.limit is not None:
@@ -577,6 +616,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"batch input={input_dir}")
     print(f"batch output={output_dir}")
+    print(f"view={args._view_family}")
     print(f"queries={len(images)} gallery_per_query={len(_collect_images(input_dir))} workers={workers}")
     if _atomic_mode_enabled(args):
         print(

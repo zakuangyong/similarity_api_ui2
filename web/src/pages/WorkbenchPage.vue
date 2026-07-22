@@ -7,15 +7,9 @@ import type { CandidateCard, CompareResponse } from '@/api/types'
 import GenerateWorkspaceLayout from '@/components/Layout.vue'
 import { loadLastCompare, saveLastCompare, saveLastQueryName } from '@/state/runCache'
 
-const viewOptions = [
-  { label: '正脸视图', value: 'front' },
-  { label: '侧面车身视图', value: 'side' },
-  { label: '尾部视图', value: 'rear' },
-]
-
 const vehicleOptions = ['轿车', 'SUV', '轿跑', '越野', 'MPV', '皮卡']
 
-const view = ref(viewOptions[0]!.value)
+const view = 'auto'
 const vehicleType = ref('轿车')
 const topk = ref(10)
 
@@ -27,6 +21,8 @@ const route = useRoute()
 const router = useRouter()
 const run = ref<CompareResponse | null>(null)
 const results = computed<CandidateCard[]>(() => (run.value?.results ?? []).slice(0, 20))
+const timingStages = computed(() => run.value?.timings?.stages ?? [])
+const timingBottleneck = computed(() => run.value?.timings?.bottleneck ?? null)
 
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
@@ -47,6 +43,12 @@ const resultSummary = computed(() => {
   if (loading.value) return '正在执行相似度查重'
   if (run.value) return `已返回 ${results.value.length} 个候选结果`
   return '上传图片并设置参数后开始比对'
+})
+
+const predictedViewText = computed(() => {
+  if (!run.value?.predicted_view) return ''
+  const label = run.value.predicted_view_label ? ` (${run.value.predicted_view_label})` : ''
+  return `识别角度：${run.value.predicted_view}${label}`
 })
 
 function clearQueryObjectUrl() {
@@ -139,7 +141,7 @@ async function startCompare() {
     topk.value = k2
     const resp = await compare({
       queryImage: queryFile.value ?? undefined,
-      view: view.value,
+      view,
       vehicleType: vehicleType.value,
       topk: k2,
     })
@@ -231,6 +233,13 @@ function scoreTagText(score: number) {
   return '局部相似'
 }
 
+function formatSeconds(seconds: number | null | undefined) {
+  const value = Number(seconds)
+  if (!Number.isFinite(value)) return '-'
+  if (value >= 60) return `${(value / 60).toFixed(1)} 分钟`
+  return `${value.toFixed(2)} 秒`
+}
+
 function goGallery() {
   void router.push('/gallery')
 }
@@ -240,12 +249,6 @@ function goGallery() {
   <GenerateWorkspaceLayout panel-title="相似度查重">
     <template #panel>
       <el-form  label-position="left" label-width="210">
-        <el-form-item  label="视角选择" label-width="210">
-          <el-select v-model="view" placeholder="请选择视角" :disabled="loading">
-            <el-option v-for="opt in viewOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-          </el-select>
-        </el-form-item>
-
         <el-form-item label="车型选择">
           <el-select v-model="vehicleType" placeholder="请选择车型" :disabled="loading">
             <el-option v-for="opt in vehicleOptions" :key="opt" :label="opt" :value="opt" />
@@ -310,6 +313,7 @@ function goGallery() {
         <div class="result-head">
           <div>
             <h2>分析结果</h2>
+            <div v-if="predictedViewText" class="result-subtitle">{{ predictedViewText }}</div>
           </div>
         </div>
         <div class="result-stage">
@@ -317,26 +321,47 @@ function goGallery() {
             <div v-if="queryPreview" class="query-card">
               <img :src="queryPreview" alt="上传待比对车辆" />
             </div>
-            <div class="candidate-grid" aria-label="Top-K 相似候选">
-              <RouterLink
-                v-for="(item, idx) in results"
-                :key="item.candidate_id"
-                class="candidate-card"
-                :to="{ name: 'detail', params: { runId: run.run_id, candidateId: item.candidate_id }, query: { q: uploadedVehicleName || run.query_name } }"
-              >
-                <div class="card-media">
-                  <span
-                    :class="['badge', 'rank', { 'rank-1': idx === 0, 'rank-2': idx === 1, 'rank-3': idx === 2 }]"
-                  >
-                    Top {{ idx + 1 }}
-                  </span>
-                  <img :src="item.candidate_path" :alt="`候选车辆：${item.candidate_name}`" />
+            <div class="result-side">
+              <div v-if="run.timings" class="timing-panel" aria-label="Pipeline 耗时统计">
+                <div class="timing-summary">
+                  <div>
+                    <span class="timing-label">总耗时</span>
+                    <strong>{{ formatSeconds(run.timings.total_seconds) }}</strong>
+                  </div>
+                  <div v-if="timingBottleneck">
+                    <span class="timing-label">瓶颈阶段</span>
+                    <strong>{{ timingBottleneck.label }}</strong>
+                    <span class="timing-muted">{{ formatSeconds(timingBottleneck.seconds) }} · {{ timingBottleneck.percent.toFixed(1) }}%</span>
+                  </div>
                 </div>
-                <div class="card-foot">
-                  <span class="car-name" :title="item.candidate_name">{{ item.candidate_name }}</span>
-                  <span class="badge footer-score" :class="scoreClass(item.final_score)">{{ item.final_score.toFixed(1).replace(/\.0$/, '') }} · {{ scoreTagText(item.final_score) }}</span>
+                <div class="timing-list">
+                  <div v-for="stage in timingStages" :key="`${stage.index}-${stage.name}`" class="timing-row">
+                    <span>{{ stage.label }}</span>
+                    <span>{{ formatSeconds(stage.seconds) }}</span>
+                  </div>
                 </div>
-              </RouterLink>
+              </div>
+              <div class="candidate-grid" aria-label="Top-K 相似候选">
+                <RouterLink
+                  v-for="(item, idx) in results"
+                  :key="item.candidate_id"
+                  class="candidate-card"
+                  :to="{ name: 'detail', params: { runId: run.run_id, candidateId: item.candidate_id }, query: { q: uploadedVehicleName || run.query_name } }"
+                >
+                  <div class="card-media">
+                    <span
+                      :class="['badge', 'rank', { 'rank-1': idx === 0, 'rank-2': idx === 1, 'rank-3': idx === 2 }]"
+                    >
+                      Top {{ idx + 1 }}
+                    </span>
+                    <img :src="item.candidate_path" :alt="`候选车辆：${item.candidate_name}`" />
+                  </div>
+                  <div class="card-foot">
+                    <span class="car-name" :title="item.candidate_name">{{ item.candidate_name }}</span>
+                    <span class="badge footer-score" :class="scoreClass(item.final_score)">{{ item.final_score.toFixed(1).replace(/\.0$/, '') }} · {{ scoreTagText(item.final_score) }}</span>
+                  </div>
+                </RouterLink>
+              </div>
             </div>
           </template>
           <template v-else-if="loading">
@@ -353,7 +378,7 @@ function goGallery() {
             <div class="empty-wrap" role="status" aria-live="polite">
               <div class="empty-card">
                 <div class="empty-title">等待开始比对</div>
-                <div class="empty-text">请先在左侧选择视角、车型并上传待比对图片，再点击“开始比对”。</div>
+                <div class="empty-text">请先在左侧选择车型并上传待比对图片，再点击“开始比对”。</div>
               </div>
             </div>
           </template>

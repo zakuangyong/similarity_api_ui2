@@ -8,9 +8,11 @@ import json
 import math
 import os
 import shutil
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import cv2
 import numpy as np
@@ -29,6 +31,7 @@ from tools.cdse_similarity import (
 )
 from tools.contour_similarity import contour_score_and_vis
 from tools.cutout_by_sam import SamModelSpec, load_sam_predictor, run_cutout_by_sam, run_sam_cutout_from_instances
+from tools.car_view_cls import normalize_view_family
 
 
 ROOT = Path(__file__).resolve().parent
@@ -43,6 +46,45 @@ class ImageItem:
     role: str
     original_path: Path
     staged_path: Path
+
+
+class PipelineTimer:
+    def __init__(self) -> None:
+        self._started = time.perf_counter()
+        self.stages: list[dict[str, Any]] = []
+
+    @contextmanager
+    def stage(self, name: str, label: str, **meta: Any) -> Iterator[None]:
+        started = time.perf_counter()
+        try:
+            yield
+        finally:
+            seconds = time.perf_counter() - started
+            row: dict[str, Any] = {
+                "name": name,
+                "label": label,
+                "seconds": round(seconds, 3),
+            }
+            if meta:
+                row.update(meta)
+            self.stages.append(row)
+
+    def snapshot(self) -> dict[str, Any]:
+        total = max(time.perf_counter() - self._started, 0.0)
+        stages: list[dict[str, Any]] = []
+        for idx, row in enumerate(self.stages, start=1):
+            seconds = float(row.get("seconds") or 0.0)
+            item = dict(row)
+            item["index"] = idx
+            item["percent"] = round(seconds / total * 100.0, 2) if total > 0 else 0.0
+            stages.append(item)
+
+        bottleneck = max(stages, key=lambda x: float(x.get("seconds") or 0.0), default=None)
+        return {
+            "total_seconds": round(total, 3),
+            "stages": stages,
+            "bottleneck": bottleneck,
+        }
 
 
 def _resolve_path(path: str | Path, *, base: Path = ROOT) -> Path:
@@ -82,6 +124,25 @@ def _config_path(config: dict[str, Any], key: str) -> Path:
     if not value:
         raise ValueError(f"配置缺少 models.{key}")
     return _resolve_path(value)
+
+
+def _view_part_weight(config: dict[str, Any], view: str) -> Path:
+    view_family = normalize_view_family(view)
+    models = config.get("models") or {}
+    key = f"{view_family}_part_weight"
+    if models.get(key):
+        return _resolve_path(models[key])
+    if view_family != "front" and models.get("front_part_weight"):
+        return _resolve_path(models["front_part_weight"])
+    return _config_path(config, key)
+
+
+def _config_parts_for_view(config: dict[str, Any], view: str) -> list[str]:
+    view_family = normalize_view_family(view)
+    raw = config.get(f"{view_family}_parts") or config.get("parts") or car_front_seg.get_view_parts(view_family)
+    if isinstance(raw, str):
+        return _parse_csv(raw)
+    return [str(x).strip() for x in raw if str(x).strip()]
 
 
 def _parse_csv(value: str | Iterable[str] | None) -> list[str]:
@@ -157,6 +218,7 @@ def _run_yolo_part_export(
     weight_path: Path,
     label_dir: Path,
     parts_dir: Path,
+    view: str,
     save_labels: bool,
     conf: float,
     iou: float,
@@ -177,6 +239,7 @@ def _run_yolo_part_export(
             conf=conf,
             iou=iou,
             imgsz=imgsz,
+            view=view,
             allowed_parts=allowed_parts,
         )
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
@@ -187,7 +250,7 @@ def _run_yolo_part_export(
                 visual_label_edge=visual_label_edge,
             )
             car_front_seg._imwrite_cn(label_dir / p.name, preview)
-        car_front_seg.export_rgba_crops(bgr, processed, parts_dir / p.stem, p.stem)
+        car_front_seg.export_rgba_crops(bgr, processed, parts_dir / p.stem, p.stem, view=view)
 
 
 def _run_part_segmentation(
@@ -196,19 +259,21 @@ def _run_part_segmentation(
     label_dir: Path,
     parts_dir: Path,
     config: dict[str, Any],
+    view: str,
     conf: float,
     iou: float,
     imgsz: int,
     visual_label_edge: bool,
     allowed_parts: set[str],
 ) -> None:
-    front_weight = _config_path(config, "front_part_weight")
+    part_weight = _view_part_weight(config, view)
 
     _run_yolo_part_export(
         input_dir=stage_dir,
-        weight_path=front_weight,
+        weight_path=part_weight,
         label_dir=label_dir,
         parts_dir=parts_dir,
+        view=view,
         save_labels=True,
         conf=conf,
         iou=iou,
@@ -225,6 +290,7 @@ def _run_part_segmentation_and_sam_cutout(
     parts_dir: Path,
     cutout_dir: Path,
     config: dict[str, Any],
+    view: str,
     conf: float,
     iou: float,
     imgsz: int,
@@ -234,7 +300,7 @@ def _run_part_segmentation_and_sam_cutout(
     sam_type: str,
     device: str | None,
 ) -> None:
-    front_weight = _config_path(config, "front_part_weight")
+    part_weight = _view_part_weight(config, view)
     if not sam_checkpoint.is_file():
         raise FileNotFoundError(str(sam_checkpoint))
 
@@ -242,7 +308,7 @@ def _run_part_segmentation_and_sam_cutout(
     parts_dir.mkdir(parents=True, exist_ok=True)
     cutout_dir.mkdir(parents=True, exist_ok=True)
 
-    model = YOLO(str(front_weight))
+    model = YOLO(str(part_weight))
     resolved_device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
     sam_predictor = load_sam_predictor(
         SamModelSpec(checkpoint=sam_checkpoint, model_type=sam_type, device=resolved_device)
@@ -256,6 +322,7 @@ def _run_part_segmentation_and_sam_cutout(
             conf=conf,
             iou=iou,
             imgsz=imgsz,
+            view=view,
             allowed_parts=allowed_parts,
         )
         if not processed:
@@ -268,7 +335,7 @@ def _run_part_segmentation_and_sam_cutout(
             visual_label_edge=visual_label_edge,
         )
         car_front_seg._imwrite_cn(label_dir / p.name, preview)
-        car_front_seg.export_rgba_crops(bgr, processed, parts_dir / p.stem, p.stem)
+        car_front_seg.export_rgba_crops(bgr, processed, parts_dir / p.stem, p.stem, view=view)
         run_sam_cutout_from_instances(
             rgb=rgb,
             bgr=bgr,
@@ -276,6 +343,7 @@ def _run_part_segmentation_and_sam_cutout(
             output_dir=cutout_dir,
             stem=p.stem,
             sam_predictor=sam_predictor,
+            view=view,
             box_margin_ratio=0.03,
             keep_largest_component=True,
         )
@@ -571,11 +639,16 @@ def _write_reports(
     results: list[dict[str, Any]],
     parts: list[str],
     features: list[str],
+    view: str,
+    view_label: str,
     output_paths: dict[str, str],
+    timings: dict[str, Any],
 ) -> dict[str, str]:
     report_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "run_id": run_id,
+        "view": view,
+        "view_label": view_label,
         "query": {
             "id": query_item.item_id,
             "path": str(query_item.original_path),
@@ -585,6 +658,7 @@ def _write_reports(
         "parts": parts,
         "features": features,
         "outputs": output_paths,
+        "timings": timings,
         "results": results,
     }
     json_path = report_dir / f"{run_id}.json"
@@ -594,16 +668,43 @@ def _write_reports(
         "# 汽车图片相似度比对报告",
         "",
         f"- 运行编号: `{run_id}`",
+        f"- 车辆角度: `{view_label}` -> `{view}`",
         f"- 待比对图片 A: `{query_item.original_path}`",
         f"- 图库数量: {payload['gallery_count']}",
         f"- 比对部件: {', '.join(parts)}",
         f"- 特征算法: {', '.join(features)}",
         "",
-        "## 排名结果",
+        "## 耗时统计",
         "",
-        "| 排名 | 图库图片 | 最终分 | 轮廓分 | 部件分 | 有效部件 |",
-        "| --- | --- | ---: | ---: | ---: | --- |",
+        f"- 总耗时: {float(timings.get('total_seconds') or 0.0):.3f} 秒",
     ]
+    bottleneck = timings.get("bottleneck") or {}
+    if bottleneck:
+        md_lines.append(
+            f"- 当前瓶颈: {bottleneck.get('label') or bottleneck.get('name')} "
+            f"({float(bottleneck.get('seconds') or 0.0):.3f} 秒，占比 {float(bottleneck.get('percent') or 0.0):.2f}%)"
+        )
+    md_lines.extend(
+        [
+            "",
+            "| 顺序 | 阶段 | 耗时(秒) | 占比 |",
+            "| ---: | --- | ---: | ---: |",
+        ]
+    )
+    for row in timings.get("stages") or []:
+        md_lines.append(
+            f"| {int(row.get('index') or 0)} | {row.get('label') or row.get('name')} | "
+            f"{float(row.get('seconds') or 0.0):.3f} | {float(row.get('percent') or 0.0):.2f}% |"
+        )
+    md_lines.extend(
+        [
+            "",
+            "## 排名结果",
+            "",
+            "| 排名 | 图库图片 | 最终分 | 轮廓分 | 部件分 | 有效部件 |",
+            "| --- | --- | ---: | ---: | ---: | --- |",
+        ]
+    )
     for idx, row in enumerate(results, start=1):
         parts_used = ", ".join((row.get("part_scores") or {}).keys()) or "-"
         contour_score = row.get("contour_score")
@@ -637,6 +738,8 @@ def run_pipeline(
     query_image: str | Path | None,
     weight: str | Path | None = DEFAULT_CONFIG,
     output_dir: str | Path = ROOT / "result",
+    view: str = "front",
+    view_label: str | None = None,
     parts: str | Iterable[str] | None = None,
     ignore_parts: str | Iterable[str] | None = None,
     features: str | Iterable[str] | None = None,
@@ -650,126 +753,178 @@ def run_pipeline(
     visual_label_edge: bool = False,
     compare_workers: int | None = 4,
 ) -> dict[str, Any]:
-    config = _load_config(weight)
-    input_dir_p = _resolve_path(input_dir)
-    output_dir_p = _resolve_path(output_dir)
-    output_dir_p.mkdir(parents=True, exist_ok=True)
-    query_p = None if query_image is None else _resolve_path(query_image)
-    run_id = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    timer = PipelineTimer()
+    with timer.stage("load_config", "加载配置"):
+        config = _load_config(weight)
+        view_family = normalize_view_family(view)
+        raw_view_label = str(view_label or view or view_family).strip() or view_family
+        input_dir_p = _resolve_path(input_dir)
+        output_dir_p = _resolve_path(output_dir)
+        output_dir_p.mkdir(parents=True, exist_ok=True)
+        query_p = None if query_image is None else _resolve_path(query_image)
+        run_id = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    items, query_item = _prepare_run_images(
-        input_dir=input_dir_p,
-        query_image=query_p,
-        output_dir=output_dir_p,
-        run_id=run_id,
-    )
+    with timer.stage("prepare_images", "准备输入图片"):
+        items, query_item = _prepare_run_images(
+            input_dir=input_dir_p,
+            query_image=query_p,
+            output_dir=output_dir_p,
+            run_id=run_id,
+        )
 
-    run_root = output_dir_p / "runs" / run_id
-    label_dir = output_dir_p / "front_label" / run_id
-    parts_dir = output_dir_p / "front_parts" / run_id
-    cutout_dir = output_dir_p / "img-cutout" / run_id
-    run_root.mkdir(parents=True, exist_ok=True)
-    parts_used = _parse_csv(parts) or list(config.get("parts") or [])
-    ignored = _parse_csv(ignore_parts)
-    allowed_parts = set(parts_used)
+    with timer.stage("prepare_outputs", "准备输出目录"):
+        run_root = output_dir_p / "runs" / run_id
+        label_dir = output_dir_p / f"{view_family}_label" / run_id
+        parts_dir = output_dir_p / f"{view_family}_parts" / run_id
+        cutout_dir = output_dir_p / "img-cutout" / run_id
+        run_root.mkdir(parents=True, exist_ok=True)
+        parts_used = _parse_csv(parts) or _config_parts_for_view(config, view_family)
+        ignored = _parse_csv(ignore_parts)
+        allowed_parts = set(parts_used)
 
     if not skip_seg and not skip_cutout:
-        _run_part_segmentation_and_sam_cutout(
-            stage_dir=items[0].staged_path.parent,
-            label_dir=label_dir,
-            parts_dir=parts_dir,
-            cutout_dir=cutout_dir,
-            config=config,
-            conf=conf,
-            iou=iou,
-            imgsz=imgsz,
-            visual_label_edge=visual_label_edge,
-            allowed_parts=allowed_parts,
-            sam_checkpoint=_resolve_path("models/sam/sam_vit_h.pth"),
-            sam_type="vit_h",
-            device=("cuda:0" if device == "cuda" else "cpu") if device else None,
-        )
+        with timer.stage(
+            "part_segmentation_and_sam_cutout",
+            "部件分割与 SAM 抠图",
+            image_count=len(items),
+            part_count=len(allowed_parts),
+        ):
+            _run_part_segmentation_and_sam_cutout(
+                stage_dir=items[0].staged_path.parent,
+                label_dir=label_dir,
+                parts_dir=parts_dir,
+                cutout_dir=cutout_dir,
+                config=config,
+                view=view_family,
+                conf=conf,
+                iou=iou,
+                imgsz=imgsz,
+                visual_label_edge=visual_label_edge,
+                allowed_parts=allowed_parts,
+                sam_checkpoint=_resolve_path("models/sam/sam_vit_h.pth"),
+                sam_type="vit_h",
+                device=("cuda:0" if device == "cuda" else "cpu") if device else None,
+            )
     elif not skip_seg:
-        _run_part_segmentation(
-            stage_dir=items[0].staged_path.parent,
-            label_dir=label_dir,
-            parts_dir=parts_dir,
-            config=config,
-            conf=conf,
-            iou=iou,
-            imgsz=imgsz,
-            visual_label_edge=visual_label_edge,
-            allowed_parts=allowed_parts,
-        )
+        with timer.stage(
+            "part_segmentation",
+            "部件分割",
+            image_count=len(items),
+            part_count=len(allowed_parts),
+        ):
+            _run_part_segmentation(
+                stage_dir=items[0].staged_path.parent,
+                label_dir=label_dir,
+                parts_dir=parts_dir,
+                config=config,
+                view=view_family,
+                conf=conf,
+                iou=iou,
+                imgsz=imgsz,
+                visual_label_edge=visual_label_edge,
+                allowed_parts=allowed_parts,
+            )
 
     if skip_seg and not skip_cutout:
-        run_cutout_by_sam(
-            stage_dir=items[0].staged_path.parent,
-            output_dir=cutout_dir,
-            config=config,
-            allowed_parts=allowed_parts,
-            sam_checkpoint=_resolve_path("models/sam/sam_vit_h.pth"),
-            sam_type="vit_h",
-            device=("cuda:0" if device == "cuda" else "cpu") if device else None,
-            conf=float(conf),
-            iou=float(iou),
-            imgsz=int(imgsz),
-            box_margin_ratio=0.03,
-            keep_largest_component=True,
-        )
+        with timer.stage(
+            "sam_cutout",
+            "SAM 抠图",
+            image_count=len(items),
+            part_count=len(allowed_parts),
+        ):
+            run_cutout_by_sam(
+                stage_dir=items[0].staged_path.parent,
+                output_dir=cutout_dir,
+                config=config,
+                allowed_parts=allowed_parts,
+                sam_checkpoint=_resolve_path("models/sam/sam_vit_h.pth"),
+                sam_type="vit_h",
+                device=("cuda:0" if device == "cuda" else "cpu") if device else None,
+                view=view_family,
+                conf=float(conf),
+                iou=float(iou),
+                imgsz=int(imgsz),
+                box_margin_ratio=0.03,
+                keep_largest_component=True,
+            )
     elif skip_cutout:
-        cutout_dir = parts_dir
+        with timer.stage("reuse_part_crops", "复用部件截图"):
+            cutout_dir = parts_dir
 
-    feature_names = _feature_list(config, features)
-    contour = _run_contour_compare(
-        items=items,
-        query_item=query_item,
-        output_dir=run_root,
-        config=config,
-        device=device,
-    )
-    results = _compare_parts(
-        cutout_dir=cutout_dir,
-        items=items,
-        query_item=query_item,
-        contour=contour,
-        config=config,
-        parts=parts_used,
-        ignored_parts=ignored,
-        features=feature_names,
-        device=device,
-        max_workers=compare_workers,
-    )
+    with timer.stage("resolve_features", "解析特征配置"):
+        feature_names = _feature_list(config, features)
+
+    with timer.stage("contour_compare", "整车轮廓对比", image_count=len(items)):
+        contour = _run_contour_compare(
+            items=items,
+            query_item=query_item,
+            output_dir=run_root,
+            config=config,
+            device=device,
+        )
+
+    with timer.stage(
+        "part_feature_compare",
+        "部件特征比对",
+        candidate_count=sum(1 for x in items if x.role == "gallery"),
+        compare_workers=compare_workers,
+    ):
+        results = _compare_parts(
+            cutout_dir=cutout_dir,
+            items=items,
+            query_item=query_item,
+            contour=contour,
+            config=config,
+            parts=parts_used,
+            ignored_parts=ignored,
+            features=feature_names,
+            device=device,
+            max_workers=compare_workers,
+        )
     if topk and topk > 0:
-        results = results[: int(topk)]
+        with timer.stage("apply_topk", "截取 Top-K", topk=int(topk)):
+            results = results[: int(topk)]
 
     output_paths = {
-        "front_label": str(label_dir),
-        "front_parts": str(parts_dir),
+        "view": view_family,
+        "view_label": raw_view_label,
+        "label_dir": str(label_dir),
+        "parts_dir": str(parts_dir),
         "img_cutout": str(cutout_dir),
         "vehicle_cutout": str(run_root / "vehicle_cutout"),
         "run_root": str(run_root),
     }
-    report_paths = _write_reports(
-        report_dir=output_dir_p / "reports",
-        run_id=run_id,
-        query_item=query_item,
-        items=items,
-        results=results,
-        parts=parts_used,
-        features=[str(x) for x in feature_names],
-        output_paths=output_paths,
-    )
+    output_paths[f"{view_family}_label"] = str(label_dir)
+    output_paths[f"{view_family}_parts"] = str(parts_dir)
+    timings = timer.snapshot()
+    with timer.stage("write_reports", "写出报告"):
+        report_paths = _write_reports(
+            report_dir=output_dir_p / "reports",
+            run_id=run_id,
+            query_item=query_item,
+            items=items,
+            results=results,
+            parts=parts_used,
+            features=[str(x) for x in feature_names],
+            view=view_family,
+            view_label=raw_view_label,
+            output_paths=output_paths,
+            timings=timings,
+        )
+    timings = timer.snapshot()
 
     return {
         "run_id": run_id,
         "query_id": query_item.item_id,
         "query": str(query_item.original_path),
         "query_staged_path": str(query_item.staged_path),
+        "view": view_family,
+        "view_label": raw_view_label,
         "gallery_count": sum(1 for x in items if x.role == "gallery"),
         "results": results,
         "outputs": output_paths,
         "reports": report_paths,
+        "timings": timings,
     }
 
 
@@ -779,6 +934,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--query-image", default=None, help="待比对图片 A。页面上传时默认保存到 ./img/_uploads。")
     parser.add_argument("--weight", default=str(DEFAULT_CONFIG), help="模型/参数配置 JSON；也可直接传 front 部件 YOLO 权重。")
     parser.add_argument("--output-dir", default="./result", help="输出根目录。")
+    parser.add_argument("--view", default="front", help="图库/部件视角，当前支持 front/back。")
     parser.add_argument("--parts", default=None, help="参与横向比对的部件，逗号分隔。")
     parser.add_argument("--ignore-parts", default="", help="忽略计算的部件，逗号分隔。")
     parser.add_argument("--features", default=None, help="CDSE 特征，默认取配置: dino,ssim,edge。")
@@ -809,6 +965,7 @@ def main(argv: list[str] | None = None) -> int:
         query_image=args.query_image,
         weight=args.weight,
         output_dir=args.output_dir,
+        view=args.view,
         parts=args.parts,
         ignore_parts=args.ignore_parts,
         features=features,
@@ -822,7 +979,18 @@ def main(argv: list[str] | None = None) -> int:
         visual_label_edge=bool(args.visual_label_edge),
         compare_workers=args.compare_workers,
     )
-    print(json.dumps({"run_id": result["run_id"], "reports": result["reports"], "top": result["results"][:3]}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "run_id": result["run_id"],
+                "reports": result["reports"],
+                "timings": result["timings"],
+                "top": result["results"][:3],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 

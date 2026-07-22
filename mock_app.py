@@ -353,7 +353,13 @@ def _render_detail(report: dict[str, Any], candidate_id: str) -> None:
 
     query = report.get("query") or {}
     query_path = _resolve_maybe_mounted_path(query.get("path"))
-    query_label_dir = _resolve_maybe_mounted_path((report.get("outputs") or {}).get("front_label"))
+    outputs = report.get("outputs") or {}
+    view_name = str(report.get("view") or "front")
+    query_label_dir = _resolve_maybe_mounted_path(
+        outputs.get(f"{view_name}_label")
+        or outputs.get("label_dir")
+        or outputs.get("front_label")
+    )
 
     candidate_path = _resolve_maybe_mounted_path(row.get("candidate_path"))
     contour_path = _resolve_maybe_mounted_path(row.get("contour_diff_image"))

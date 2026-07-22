@@ -38,7 +38,7 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T
 }
 
-export async function compare(input: { queryImage?: File; view: string; vehicleType: string; topk: number }): Promise<CompareResponse> {
+export async function compare(input: { queryImage?: File; view: string; vehicleType: string; topk: number; retrievalMode?: 'legacy' | 'v4' | 'shadow' }): Promise<CompareResponse> {
   if (USE_MOCK) return await mockCompare(input.topk)
 
   const form = new FormData()
@@ -46,6 +46,7 @@ export async function compare(input: { queryImage?: File; view: string; vehicleT
   form.append('view', input.view)
   form.append('vehicle_type', input.vehicleType)
   form.append('topk', String(input.topk))
+  if (input.retrievalMode) form.append('retrieval_mode', input.retrievalMode)
   return await http<CompareResponse>('/api/compare', { method: 'POST', body: form })
 }
 

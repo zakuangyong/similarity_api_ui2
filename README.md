@@ -14,7 +14,7 @@
 - `./img/front/`: front 角度图库图片。
 - `./img/_uploads/`: 页面上传的待比对图片 A。
 - `./models/`: 已集中模型文件。
-- `./result/`: 全部输出文件。
+- `./result/`: 全部输出文件。bat
 - `./tools/`: 来源算法脚本，已补充 `--input-dir`、`--weight`、`--output-dir` 参数别名。
 
 ## 命令行运行
@@ -60,3 +60,28 @@ Docker 构建时如果无法稳定访问 GitHub，可以把 `segment-anything` �
 
 - 下载：`https://github.com/facebookresearch/segment-anything/archive/refs/heads/main.zip`
 - 保存到：`vendor/segment-anything-main.zip`
+
+## V4 向量检索部署
+
+V4 保留原教师 Pipeline 作为回退，通过 `SIM_RETRIEVAL_MODE` 选择运行模式：
+
+- `legacy`：只运行原逐图库评分流程。
+- `v4`：运行 V4 查询编码和 FAISS 检索，失败或非 front 图片自动回退。
+- `shadow`：立即返回 V4，后台在 `result/v4-shadow/` 运行旧流程用于对照。
+
+部署前确保 `gallery_store/indexes/v4/` 包含 `best.pt`、`manifest.json`、
+`vector_score.f16.npy`、`valid_mask.u8.npy`、`gallery_manifest.parquet` 和
+`faiss_score.index`。GPU Docker 启动命令：
+
+```bash
+SIM_V4_GALLERY_HOST_ROOT=/data/kuangyong/proj/similarity_api_ui2/gallery_store \
+SIM_V4_PROJECT_HOST_ROOT=/data/kuangyong/proj/similarity_teach_data_pre \
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.gpu.yml \
+  -f docker-compose.v4.yml \
+  up -d --build
+```
+
+接口级临时灰度可以在 `/api/compare` 表单中传入 `retrieval_mode=legacy|v4|shadow`，
+未传时使用环境变量。`/health?deep=true` 会返回 V4 是否就绪、图库数量和模型指纹。

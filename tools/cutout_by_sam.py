@@ -11,6 +11,10 @@ from segment_anything import SamPredictor, sam_model_registry
 from ultralytics import YOLO
 
 from tools import car_front_seg
+from tools.car_view_cls import normalize_view_family
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -147,7 +151,10 @@ def _clean_grille_mask(
     return m.astype(bool)
 
 
-def _clean_front_bumper_mask(
+FILL_HOLE_PARTS = {"front_bumper", "back_bumper", "trunk_lid"}
+
+
+def _clean_fill_hole_part_mask(
     *,
     sam_mask: np.ndarray,
     yolo_box: np.ndarray,
@@ -212,6 +219,7 @@ def run_sam_cutout_from_instances(
     output_dir: Path,
     stem: str,
     sam_predictor: SamPredictor,
+    view: str = "front",
     box_margin_ratio: float = 0.03,
     keep_largest_component: bool = True,
 ) -> None:
@@ -256,8 +264,8 @@ def run_sam_cutout_from_instances(
                 image_shape=rgb.shape[:2],
                 yolo_mask01=yolo_mask01,
             )
-        elif name == "front_bumper":
-            cleaned = _clean_front_bumper_mask(
+        elif name in FILL_HOLE_PARTS:
+            cleaned = _clean_fill_hole_part_mask(
                 sam_mask=sam_mask,
                 yolo_box=np.asarray(box, dtype=np.float32),
                 image_shape=rgb.shape[:2],
@@ -277,7 +285,7 @@ def run_sam_cutout_from_instances(
         refined.append(inst2)
 
     if refined:
-        car_front_seg.export_rgba_crops(bgr, refined, output_dir / stem, stem)
+        car_front_seg.export_rgba_crops(bgr, refined, output_dir / stem, stem, view=view)
 
 
 def run_cutout_by_sam(
@@ -289,6 +297,7 @@ def run_cutout_by_sam(
     sam_checkpoint: Path,
     sam_type: str = "vit_h",
     device: str | None = None,
+    view: str = "front",
     conf: float = 0.25,
     iou: float = 0.7,
     imgsz: int = 640,
@@ -297,9 +306,14 @@ def run_cutout_by_sam(
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    front_weight = Path(str(config.get("models", {}).get("front_part_weight") or ""))
-    if not front_weight.is_file():
-        raise FileNotFoundError(str(front_weight))
+    view_family = normalize_view_family(view)
+    models = config.get("models") or {}
+    weight_value = models.get(f"{view_family}_part_weight") or models.get("front_part_weight") or ""
+    part_weight = Path(str(weight_value))
+    if part_weight and not part_weight.is_absolute():
+        part_weight = (ROOT / part_weight).resolve()
+    if not part_weight.is_file():
+        raise FileNotFoundError(str(part_weight))
     if not sam_checkpoint.is_file():
         raise FileNotFoundError(str(sam_checkpoint))
 
@@ -308,18 +322,19 @@ def run_cutout_by_sam(
         SamModelSpec(checkpoint=sam_checkpoint, model_type=sam_type, device=resolved_device)
     )
 
-    model_front = YOLO(str(front_weight))
+    model_part = YOLO(str(part_weight))
 
     for p in car_front_seg.iter_images(stage_dir):
         rgb = car_front_seg.load_rgb_with_white_bg(p)
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
         processed = car_front_seg.detect_processed_instances(
-            model=model_front,
+            model=model_part,
             rgb=rgb,
             conf=conf,
             iou=iou,
             imgsz=imgsz,
+            view=view_family,
             allowed_parts=allowed_parts,
         )
         run_sam_cutout_from_instances(
@@ -329,6 +344,7 @@ def run_cutout_by_sam(
             output_dir=output_dir,
             stem=p.stem,
             sam_predictor=sam_predictor,
+            view=view_family,
             box_margin_ratio=box_margin_ratio,
             keep_largest_component=keep_largest_component,
         )

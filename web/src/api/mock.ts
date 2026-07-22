@@ -83,6 +83,8 @@ export async function mockCompare(topk: number): Promise<CompareResponse> {
     run_id: runId,
     query_name: '上传比对图片',
     query_staged_path: '/img/front/星耀7.svg',
+    predicted_view: 'front',
+    predicted_view_label: 'front',
     results,
   }
 }

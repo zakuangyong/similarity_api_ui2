@@ -34,6 +34,37 @@ RULES = {
     "front_bumper": PartRule(name="front_bumper", max_instances=1),
 }
 
+BACK_RULES = {
+    "left_mirror": PartRule(name="left_mirror", side="left", max_instances=1, merge_mode="union"),
+    "left_taillight": PartRule(name="left_taillight", max_instances=1),
+    "line_taillight": PartRule(name="line_taillight", max_instances=1),
+    "back_glass": PartRule(name="back_glass", max_instances=1),
+    "back_bumper": PartRule(name="back_bumper", max_instances=1),
+    "trunk_lid": PartRule(name="trunk_lid", max_instances=1),
+}
+
+VIEW_RULES = {
+    "front": RULES,
+    "back": BACK_RULES,
+}
+
+
+def _normalize_view(view: str | None) -> str:
+    v = (view or "front").strip().lower()
+    if v.startswith("back") or v == "rear":
+        return "back"
+    if v.startswith("front"):
+        return "front"
+    return v if v in VIEW_RULES else "front"
+
+
+def get_view_rules(view: str | None) -> dict[str, PartRule]:
+    return VIEW_RULES.get(_normalize_view(view), RULES)
+
+
+def get_view_parts(view: str | None) -> list[str]:
+    return list(get_view_rules(view).keys())
+
 def iter_images(path: Path) -> list[Path]:
     if path.is_dir():
         exts = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff", ".heic", ".heif"}
@@ -200,7 +231,10 @@ def _fill_mask_holes(mask: np.ndarray) -> np.ndarray:
     return out.astype(np.uint8)
 
 
-def _trim_front_bumper_side_artifacts(mask: np.ndarray) -> np.ndarray:
+FILL_EXTERNAL_CONTOUR_PARTS = {"front_bumper", "back_bumper", "trunk_lid"}
+
+
+def _trim_filled_part_side_artifacts(mask: np.ndarray) -> np.ndarray:
     m = mask.astype(np.uint8).copy()
     if m.max() == 0:
         return m
@@ -218,8 +252,8 @@ def _trim_front_bumper_side_artifacts(mask: np.ndarray) -> np.ndarray:
     return m
 
 
-def _prepare_front_bumper_mask(mask: np.ndarray) -> np.ndarray:
-    m = _trim_front_bumper_side_artifacts(mask)
+def _prepare_filled_part_mask(mask: np.ndarray) -> np.ndarray:
+    m = _trim_filled_part_side_artifacts(mask)
     m = _keep_largest_component(m)
     m = _fill_mask_holes(m)
     m = cv2.erode(
@@ -271,7 +305,7 @@ def _mask_to_rgba_crop(
             return None
 
     if fill_external_contour:
-        crop_fg = _prepare_front_bumper_mask(crop_fg)
+        crop_fg = _prepare_filled_part_mask(crop_fg)
         m = crop_fg.astype(np.float32)
 
     ys, xs = np.where(crop_fg > 0)
@@ -472,13 +506,14 @@ def detect_processed_instances(
     conf: float,
     iou: float,
     imgsz: int,
+    view: str = "front",
     allowed_parts: set[str] | None = None,
 ) -> list[dict]:
     results = model.predict(rgb, conf=conf, iou=iou, imgsz=imgsz, verbose=False)
     if not results:
         return []
     raw = unwrap_instances(results[0])
-    processed = postprocess_instances(raw, RULES, side_x_max=SIDE_X_MAX, img_w=int(rgb.shape[1]))
+    processed = postprocess_instances(raw, get_view_rules(view), side_x_max=SIDE_X_MAX, img_w=int(rgb.shape[1]))
     if allowed_parts is not None:
         processed = [x for x in processed if str(_inst_get(x, "name") or "") in allowed_parts]
     return processed
@@ -548,7 +583,13 @@ def render_annotated_preview(img_bgr: np.ndarray, instances: Iterable, visual_la
     return annotated
 
 
-def export_rgba_crops(img_bgr: np.ndarray, instances: Iterable, out_dir: Union[str, Path], stem: str) -> None:
+def export_rgba_crops(
+    img_bgr: np.ndarray,
+    instances: Iterable,
+    out_dir: Union[str, Path],
+    stem: str,
+    view: str = "front",
+) -> None:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     per_class_idx: dict[str, int] = {}
@@ -560,7 +601,7 @@ def export_rgba_crops(img_bgr: np.ndarray, instances: Iterable, out_dir: Union[s
         rgba = _mask_to_rgba_crop(
             img_bgr,
             mask01,
-            fill_external_contour=(name == "front_bumper"),
+            fill_external_contour=(name in FILL_EXTERNAL_CONTOUR_PARTS),
             keep_largest_component=(name != "grille"),
         )
         if rgba is None:
@@ -575,6 +616,7 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", "--img_dir", dest="input_dir", default=str(DEFAULT_IMG_PATH))
     parser.add_argument("--weights", default=str(WEIGHTS))
+    parser.add_argument("--view", default="front", help="部件视角规则，当前支持 front/back。")
     parser.add_argument("--conf", type=float, default=float(DEFAULT_CONF))
     parser.add_argument("--iou", type=float, default=float(DEFAULT_IOU))
     parser.add_argument("--imgsz", type=int, default=int(DEFAULT_IMGSZ))
@@ -595,8 +637,9 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     img_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
-    label_dir = Path(args.label_dir) if args.label_dir else (output_dir / "front_label")
-    out_root = Path(args.out_root) if args.out_root else (output_dir / "front_parts")
+    view = _normalize_view(args.view)
+    label_dir = Path(args.label_dir) if args.label_dir else (output_dir / f"{view}_label")
+    out_root = Path(args.out_root) if args.out_root else (output_dir / f"{view}_parts")
     save_labels = not bool(args.no_labels)
     save_crops = not bool(args.no_crops)
     if save_labels:
@@ -611,7 +654,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             continue
 
         raw = unwrap_instances(results[0])
-        processed = postprocess_instances(raw, RULES, side_x_max=args.side_x_max, img_w=int(rgb.shape[1]))
+        processed = postprocess_instances(raw, get_view_rules(view), side_x_max=args.side_x_max, img_w=int(rgb.shape[1]))
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
         if save_labels:
@@ -619,7 +662,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             _imwrite_cn(label_dir / p.name, preview)
 
         if save_crops:
-            export_rgba_crops(bgr, processed, out_root / p.stem, p.stem)
+            export_rgba_crops(bgr, processed, out_root / p.stem, p.stem, view=view)
 
 
 if __name__ == "__main__":

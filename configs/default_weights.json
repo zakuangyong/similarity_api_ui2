@@ -1,6 +1,8 @@
 {
   "models": {
     "front_part_weight": "models/yolo-seg/yolo11m-seg-front-6label-2000.pt",
+    "back_part_weight": "models/yolo-seg/yolo11m-seg-back-4labels.pt",
+    "view_cls_weight": "models/yolo-view-cls/yolo11m-cls-for-car-view-train7.pt",
     "birefnet_model": "models/BiRefNet",
     "cdse_model_dir": "models",
     "clip_dir": "models/clip-vit-large-patch14",
@@ -14,6 +16,22 @@
     "grille",
     "hood",
     "right_mirror"
+  ],
+  "front_parts": [
+    "front_glass",
+    "front_right_light",
+    "front_bumper",
+    "grille",
+    "hood",
+    "right_mirror"
+  ],
+  "back_parts": [
+    "left_mirror",
+    "left_taillight",
+    "line_taillight",
+    "back_glass",
+    "back_bumper",
+    "trunk_lid"
   ],
   "features": "clip,dino,ssim,edge",
   "contour": {
@@ -70,6 +88,42 @@
       "dino": 0.45,
       "ssim": 0.15,
       "edge": 0.10
+    },
+    "left_mirror": {
+      "clip": 0.30,
+      "dino": 0.45,
+      "ssim": 0.15,
+      "edge": 0.10
+    },
+    "left_taillight": {
+      "clip": 0.12,
+      "dino": 0.38,
+      "ssim": 0.30,
+      "edge": 0.20
+    },
+    "line_taillight": {
+      "clip": 0.10,
+      "dino": 0.35,
+      "ssim": 0.35,
+      "edge": 0.20
+    },
+    "back_glass": {
+      "clip": 0.18,
+      "dino": 0.42,
+      "ssim": 0.25,
+      "edge": 0.15
+    },
+    "back_bumper": {
+      "clip": 0.20,
+      "dino": 0.32,
+      "ssim": 0.18,
+      "edge": 0.30
+    },
+    "trunk_lid": {
+      "clip": 0.18,
+      "dino": 0.45,
+      "ssim": 0.22,
+      "edge": 0.15
     }
   },
   "part_overall_weights": {
@@ -78,7 +132,13 @@
     "front_bumper": 0.18,
     "grille": 0.18,
     "hood": 0.15,
-    "right_mirror": 0.12
+    "right_mirror": 0.12,
+    "left_mirror": 0.12,
+    "left_taillight": 0.20,
+    "line_taillight": 0.14,
+    "back_glass": 0.15,
+    "back_bumper": 0.195,
+    "trunk_lid": 0.195
   }
 }
 

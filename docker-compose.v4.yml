@@ -1,0 +1,14 @@
+services:
+  similarity-backend:
+    volumes:
+      - ${SIM_V4_GALLERY_HOST_ROOT:-./gallery_store}:/app/gallery_store:ro
+      - ${SIM_V4_PROJECT_HOST_ROOT:-../similarity_teach_data_pre}:/opt/similarity_teach_data_pre:ro
+    environment:
+      SIM_RETRIEVAL_MODE: ${SIM_RETRIEVAL_MODE:-v4}
+      SIM_V4_GALLERY_ROOT: /app/gallery_store
+      SIM_V4_PROJECT_ROOT: /opt/similarity_teach_data_pre
+      SIM_V4_PREPROCESS_CONFIG: /opt/similarity_teach_data_pre/configs/default.yaml
+      SIM_V4_QUERY_STORE: /app/result/v4-query-cache
+      SIM_V4_DEVICE: ${SIM_V4_DEVICE:-cuda}
+      SIM_V4_CANDIDATE_K: ${SIM_V4_CANDIDATE_K:-100}
+      SIM_V4_FALLBACK_ON_ERROR: ${SIM_V4_FALLBACK_ON_ERROR:-true}
